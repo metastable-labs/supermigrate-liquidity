@@ -1,8 +1,8 @@
 ## L2LiqudiityManager.sol (Deployed only on Base)
 - Interacts with aerodrome to deposit Liquidity
 - Tracks individual migration positions
-- Communicates with the Yield Calculation Module to apply appropriate yields based on migration
-- Tracks staking position on Aerodrome
+- Stake LP token on aerodrome
+    - Tracks staking position on Aerodrome
 
 ## LiquidityMigration.sol (Deployed on Ethereum)
 This contract is the central hub for managing the migration of liquidity from Layer 1 to Layer 2.
