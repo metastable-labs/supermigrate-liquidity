@@ -34,7 +34,7 @@ contract L2LiquidityManager is Initializable, UUPSUpgradeable, OwnableUpgradeabl
     event LPTokensStaked(address user, address pool, uint256 amount);
     event PoolSet(address tokenA, address tokenB, address pool, address gauge);
     event LPTokensStaked(address user, address pool, address gauge, uint256 amount);
-    event LPTokensWithdrawn(address user, address pool, address gauge, uint256 amount);
+    event LPTokensWithdrawn(uint256 amount);
     event AeroEmissionsClaimed(address user, address pool, address gauge);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -63,7 +63,7 @@ contract L2LiquidityManager is Initializable, UUPSUpgradeable, OwnableUpgradeabl
             poolExists[pool] = true;
         }
 
-        emit PoolSet(token0, token1, pool);
+        emit PoolSet(tokenA, tokenB, pool, gauge);
     }
 
     function getPool(address tokenA, address tokenB) external view returns (address pool, address gauge) {
@@ -210,11 +210,11 @@ contract L2LiquidityManager is Initializable, UUPSUpgradeable, OwnableUpgradeabl
         emit LPTokensStaked(owner, poolData.poolAddress, poolData.gaugeAddress, amount);
     }
 
-    function unstakeLPToken(uint256 amount, address owner, address tokenA, address tokenB) external nonReentrant {
+    function unstakeLPToken(uint256 amount, address tokenA, address tokenB) external nonReentrant {
         PoolData memory poolData = tokenPairToPools[tokenA][tokenB];
 
-        IGauge(poolData.gaugeAddress).withdraw(amount, owner);
-        emit LPTokensWithdrawn(owner, poolData.poolAddress, poolData.gaugeAddress, amount);
+        IGauge(poolData.gaugeAddress).withdraw(amount);
+        emit LPTokensWithdrawn(amount);
     }
 
     function claimAeroRewards(address owner, address tokenA, address tokenB) external nonReentrant {
