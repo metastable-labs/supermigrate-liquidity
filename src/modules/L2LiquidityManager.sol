@@ -1,5 +1,4 @@
 // Interacts with aerodrome to deposit Liquidity
-// check if pool exist on aerodrome, deposit, else create
 // stake LP tokens for aero rewards
 // Tracks individual migration positions
 // make contracts upgradeable
@@ -14,7 +13,12 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 
-contract L2LiquidityManager is Initializable, UUPSUpgradeable, OwnableUpgradeable, ReentrancyGuardUpgradeable {
+contract L2LiquidityManager is
+    Initializable,
+    UUPSUpgradeable,
+    OwnableUpgradeable,
+    ReentrancyGuardUpgradeable
+{
     IRouter public aerodromeRouter;
     address[] private allPools;
     mapping(address => bool) private poolExists;
@@ -24,7 +28,12 @@ contract L2LiquidityManager is Initializable, UUPSUpgradeable, OwnableUpgradeabl
     mapping(address => mapping(address => address)) public tokenPairToPools; // pool address => first token => second token
 
     event LiquidityDeposited(
-        address user, address token0, address token1, uint256 amount0, uint256 amount1, uint256 lpTokens
+        address user,
+        address token0,
+        address token1,
+        uint256 amount0,
+        uint256 amount1,
+        uint256 lpTokens
     );
     event LPTokensStaked(address user, address pool, uint256 amount);
     event PoolSet(address token0, address token1, address pool);
@@ -43,8 +52,15 @@ contract L2LiquidityManager is Initializable, UUPSUpgradeable, OwnableUpgradeabl
     }
     // add a new pool to supermigrate
 
-    function setPool(address token0, address token1, address pool) external onlyOwner {
-        require(token0 != address(0) && token1 != address(0) && pool != address(0), "Invalid addresses");
+    function setPool(
+        address token0,
+        address token1,
+        address pool
+    ) external onlyOwner {
+        require(
+            token0 != address(0) && token1 != address(0) && pool != address(0),
+            "Invalid addresses"
+        );
         tokenPairToPools[token0][token1] = pool;
         tokenPairToPools[token1][token0] = pool;
 
@@ -56,7 +72,10 @@ contract L2LiquidityManager is Initializable, UUPSUpgradeable, OwnableUpgradeabl
         emit PoolSet(token0, token1, pool);
     }
 
-    function getPool(address token0, address token1) external view returns (address) {
+    function getPool(
+        address token0,
+        address token1
+    ) external view returns (address) {
         return tokenPairToPools[token0][token1];
     }
     // get the total number of pools within supermigrate
@@ -74,7 +93,10 @@ contract L2LiquidityManager is Initializable, UUPSUpgradeable, OwnableUpgradeabl
      * Then make one or more calls to getPools(start, end) to retrieve all pools in batches.
      * end
      */
-    function getPools(uint256 start, uint256 end) external view returns (address[] memory) {
+    function getPools(
+        uint256 start,
+        uint256 end
+    ) external view returns (address[] memory) {
         require(start < end, "Invalid range");
         require(end <= allPools.length, "End out of bounds");
 
@@ -85,11 +107,17 @@ contract L2LiquidityManager is Initializable, UUPSUpgradeable, OwnableUpgradeabl
         return result;
     }
 
-    function getUserLiquidity(address user, address token) external view returns (uint256) {
+    function getUserLiquidity(
+        address user,
+        address token
+    ) external view returns (uint256) {
         return userLiquidity[user][token];
     }
 
-    function getUserStakedLP(address user, address pool) external view returns (uint256) {
+    function getUserStakedLP(
+        address user,
+        address pool
+    ) external view returns (uint256) {
         return userStakedLPTokens[user][pool];
     }
 
@@ -118,38 +146,59 @@ contract L2LiquidityManager is Initializable, UUPSUpgradeable, OwnableUpgradeabl
             );
         } else {
             require(msg.value == 0, "ETH sent with token-token deposit");
-            _depositLiquidityERC20(tokenA, tokenB, amountA, amountB, amountAMin, amountBMin);
+            _depositLiquidityERC20(
+                tokenA,
+                tokenB,
+                amountA,
+                amountB,
+                amountAMin,
+                amountBMin
+            );
         }
     }
 
-    function _depositLiquidityETH(address token, uint256 amountToken, uint256 amountTokenMin, uint256 amountETHMin)
-        private
-    {
+    function _depositLiquidityETH(
+        address token,
+        uint256 amountToken,
+        uint256 amountTokenMin,
+        uint256 amountETHMin
+    ) private {
         IERC20(token).approve(address(aerodromeRouter), amountToken);
 
-        (uint256 amountTokenOut, uint256 amountETHOut, uint256 liquidity) = aerodromeRouter.addLiquidityETH{
-            value: msg.value
-        }(
-            token,
-            true, // assuming stable pool
-            amountToken,
-            amountTokenMin,
-            amountETHMin,
-            address(this),
-            block.timestamp
-        );
+        (
+            uint256 amountTokenOut,
+            uint256 amountETHOut,
+            uint256 liquidity
+        ) = aerodromeRouter.addLiquidityETH{value: msg.value}(
+                token,
+                true, // assuming stable pool
+                amountToken,
+                amountTokenMin,
+                amountETHMin,
+                address(this),
+                block.timestamp
+            );
         // Update user liquidity
         userLiquidity[msg.sender][token] += amountTokenOut;
-        userLiquidity[msg.sender][address(aerodromeRouter.weth())] += amountETHOut;
+        userLiquidity[msg.sender][
+            address(aerodromeRouter.weth())
+        ] += amountETHOut;
 
         // Refund excess ETH if any
         if (msg.value > amountETHOut) {
-            (bool success,) = msg.sender.call{value: msg.value - amountETHOut}("");
+            (bool success, ) = msg.sender.call{value: msg.value - amountETHOut}(
+                ""
+            );
             require(success, "ETH transfer failed");
         }
 
         emit LiquidityDeposited(
-            msg.sender, address(aerodromeRouter.weth()), token, amountETHOut, amountTokenOut, liquidity
+            msg.sender,
+            address(aerodromeRouter.weth()),
+            token,
+            amountETHOut,
+            amountTokenOut,
+            liquidity
         );
     }
 
@@ -164,23 +213,36 @@ contract L2LiquidityManager is Initializable, UUPSUpgradeable, OwnableUpgradeabl
         IERC20(tokenA).approve(address(aerodromeRouter), amountA);
         IERC20(tokenB).approve(address(aerodromeRouter), amountB);
 
-        (uint256 amountAOut, uint256 amountBOut, uint256 liquidity) = aerodromeRouter.addLiquidity(
-            tokenA,
-            tokenB,
-            true, // assuming stable pool, adjust if needed
-            amountA,
-            amountB,
-            amountAMin,
-            amountBMin,
-            address(this),
-            block.timestamp
-        );
+        (
+            uint256 amountAOut,
+            uint256 amountBOut,
+            uint256 liquidity
+        ) = aerodromeRouter.addLiquidity(
+                tokenA,
+                tokenB,
+                true, // assuming stable pool, adjust if needed
+                amountA,
+                amountB,
+                amountAMin,
+                amountBMin,
+                address(this),
+                block.timestamp
+            );
 
         // Update user liquidity
         userLiquidity[msg.sender][tokenA] += amountAOut;
         userLiquidity[msg.sender][tokenB] += amountBOut;
-        emit LiquidityDeposited(msg.sender, tokenA, tokenB, amountAOut, amountBOut, liquidity);
+        emit LiquidityDeposited(
+            msg.sender,
+            tokenA,
+            tokenB,
+            amountAOut,
+            amountBOut,
+            liquidity
+        );
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+    function _authorizeUpgrade(
+        address newImplementation
+    ) internal override onlyOwner {}
 }
