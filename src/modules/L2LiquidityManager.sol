@@ -34,6 +34,7 @@ contract L2LiquidityManager is Initializable, UUPSUpgradeable, OwnableUpgradeabl
     event LPTokensStaked(address user, address pool, uint256 amount);
     event PoolSet(address tokenA, address tokenB, address pool, address gauge);
     event LPTokensStaked(address user, address pool, address gauge, uint256 amount);
+    event LPTokensWithdrawn(address user, address pool, address gauge, uint256 amount);
     event AeroEmissionsClaimed(address user, address pool, address gauge);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -207,6 +208,13 @@ contract L2LiquidityManager is Initializable, UUPSUpgradeable, OwnableUpgradeabl
         IERC20(poolData.poolAddress).approve(poolData.gaugeAddress, amount);
         IGauge(poolData.gaugeAddress).deposit(amount, owner);
         emit LPTokensStaked(owner, poolData.poolAddress, poolData.gaugeAddress, amount);
+    }
+
+    function unstakeLPToken(uint256 amount, address owner, address tokenA, address tokenB) external nonReentrant {
+        PoolData memory poolData = tokenPairToPools[tokenA][tokenB];
+
+        IGauge(poolData.gaugeAddress).withdraw(amount, owner);
+        emit LPTokensWithdrawn(owner, poolData.poolAddress, poolData.gaugeAddress, amount);
     }
 
     function claimAeroRewards(address owner, address tokenA, address tokenB) external nonReentrant {
