@@ -9,4 +9,4 @@
 	url = https://github.com/OpenZeppelin/openzeppelin-contracts-upgradeable
 [submodule "lib/contracts"]
 	path = lib/contracts
-	url = https://github.com/aerodrome-finance/contracts
+	url = https://github.com/@layerzerolabs/lz-evm-protocol-v2/contracts
