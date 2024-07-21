@@ -126,7 +126,8 @@ contract L2LiquidityManager is Initializable, UUPSUpgradeable, OwnableUpgradeabl
         uint256 amountA,
         uint256 amountB,
         uint256 amountAMin,
-        uint256 amountBMin
+        uint256 amountBMin,
+        bool poolStable
     ) external payable nonReentrant {
         PoolData memory poolData = tokenPairToPools[tokenA][tokenB];
         require(poolData.poolAddress != address(0), "Pool does not exist");
@@ -141,17 +142,22 @@ contract L2LiquidityManager is Initializable, UUPSUpgradeable, OwnableUpgradeabl
                 isETHA ? tokenB : tokenA,
                 isETHA ? amountB : amountA,
                 isETHA ? amountBMin : amountAMin,
-                isETHA ? amountAMin : amountBMin
+                isETHA ? amountAMin : amountBMin,
+                poolStable
             );
         } else {
             require(msg.value == 0, "ETH sent with token-token deposit");
-            _depositLiquidityERC20(tokenA, tokenB, amountA, amountB, amountAMin, amountBMin);
+            _depositLiquidityERC20(tokenA, tokenB, amountA, amountB, amountAMin, amountBMin, poolStable);
         }
     }
 
-    function _depositLiquidityETH(address token, uint256 amountToken, uint256 amountTokenMin, uint256 amountETHMin)
-        private
-    {
+    function _depositLiquidityETH(
+        address token,
+        uint256 amountToken,
+        uint256 amountTokenMin,
+        uint256 amountETHMin,
+        bool poolStable
+    ) private {
         IERC20(token).approve(address(aerodromeRouter), amountToken);
 
         // calculate minimum amount with 0.1% slippage
@@ -160,15 +166,7 @@ contract L2LiquidityManager is Initializable, UUPSUpgradeable, OwnableUpgradeabl
 
         (uint256 amountTokenOut, uint256 amountETHOut, uint256 liquidity) = aerodromeRouter.addLiquidityETH{
             value: msg.value
-        }(
-            token,
-            true, // assuming stable pool
-            amountToken,
-            updatedAmountTokenMin,
-            updatedAmountEthMin,
-            address(this),
-            block.timestamp
-        );
+        }(token, poolStable, amountToken, updatedAmountTokenMin, updatedAmountEthMin, address(this), block.timestamp);
         // Update user liquidity
         userLiquidity[msg.sender][token] += amountTokenOut;
         userLiquidity[msg.sender][address(aerodromeRouter.weth())] += amountETHOut;
@@ -190,7 +188,8 @@ contract L2LiquidityManager is Initializable, UUPSUpgradeable, OwnableUpgradeabl
         uint256 amountA,
         uint256 amountB,
         uint256 amountAMin,
-        uint256 amountBMin
+        uint256 amountBMin,
+        bool poolStable
     ) private {
         IERC20(tokenA).approve(address(aerodromeRouter), amountA);
         IERC20(tokenB).approve(address(aerodromeRouter), amountB);
@@ -202,7 +201,7 @@ contract L2LiquidityManager is Initializable, UUPSUpgradeable, OwnableUpgradeabl
         (uint256 amountAOut, uint256 amountBOut, uint256 liquidity) = aerodromeRouter.addLiquidity(
             tokenA,
             tokenB,
-            true, // assuming stable pool, adjust if needed
+            poolStable,
             amountA,
             amountB,
             updatedAmountAMin,
