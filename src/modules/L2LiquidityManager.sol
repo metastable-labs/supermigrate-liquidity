@@ -19,6 +19,12 @@ contract L2LiquidityManager is Initializable, UUPSUpgradeable, OwnableUpgradeabl
     PoolData[] private allPools;
     mapping(address => bool) private poolExists;
 
+    // 10000 = 100%, 5000 = 50%, 100 = 1%, 1 = 0.01%
+    uint256 public constant FEE_DENOMINATOR = 10_000;
+    uint256 public constant LIQ_SLIPPAGE = 10; // 0.1%
+    uint256 public migrationFee;
+    address public feeReceiver;
+
     struct PoolData {
         address poolAddress;
         address gaugeAddress;
@@ -42,11 +48,12 @@ contract L2LiquidityManager is Initializable, UUPSUpgradeable, OwnableUpgradeabl
         _disableInitializers();
     }
 
-    function initialize(address _aerodromeRouter) public initializer {
+    function initialize(address _aerodromeRouter, address _feeReceiver, uint256 _migrationFee) public initializer {
         __Ownable_init(msg.sender);
         __UUPSUpgradeable_init();
         __ReentrancyGuard_init();
-
+        migrationFee = _migrationFee;
+        feeReceiver = _feeReceiver;
         aerodromeRouter = IRouter(_aerodromeRouter);
     }
     // add a new pool to supermigrate
@@ -119,10 +126,11 @@ contract L2LiquidityManager is Initializable, UUPSUpgradeable, OwnableUpgradeabl
         uint256 amountA,
         uint256 amountB,
         uint256 amountAMin,
-        uint256 amountBMin
+        uint256 amountBMin,
+        bool poolStable
     ) external payable nonReentrant {
-        address pool = tokenPairToPools[tokenA][tokenB];
-        require(pool != address(0), "Pool does not exist");
+        PoolData memory poolData = tokenPairToPools[tokenA][tokenB];
+        require(poolData.poolAddress != address(0), "Pool does not exist");
 
         bool isETHA = tokenA == address(aerodromeRouter.weth());
         bool isETHB = tokenB == address(aerodromeRouter.weth());
@@ -134,30 +142,31 @@ contract L2LiquidityManager is Initializable, UUPSUpgradeable, OwnableUpgradeabl
                 isETHA ? tokenB : tokenA,
                 isETHA ? amountB : amountA,
                 isETHA ? amountBMin : amountAMin,
-                isETHA ? amountAMin : amountBMin
+                isETHA ? amountAMin : amountBMin,
+                poolStable
             );
         } else {
             require(msg.value == 0, "ETH sent with token-token deposit");
-            _depositLiquidityERC20(tokenA, tokenB, amountA, amountB, amountAMin, amountBMin);
+            _depositLiquidityERC20(tokenA, tokenB, amountA, amountB, amountAMin, amountBMin, poolStable);
         }
     }
 
-    function _depositLiquidityETH(address token, uint256 amountToken, uint256 amountTokenMin, uint256 amountETHMin)
-        private
-    {
+    function _depositLiquidityETH(
+        address token,
+        uint256 amountToken,
+        uint256 amountTokenMin,
+        uint256 amountETHMin,
+        bool poolStable
+    ) private {
         IERC20(token).approve(address(aerodromeRouter), amountToken);
+
+        // calculate minimum amount with 0.1% slippage
+        uint256 updatedAmountTokenMin = mulDiv(amountTokenMin, FEE_DENOMINATOR - LIQ_SLIPPAGE, FEE_DENOMINATOR);
+        uint256 updatedAmountEthMin = mulDiv(amountETHMin, FEE_DENOMINATOR - LIQ_SLIPPAGE, FEE_DENOMINATOR);
 
         (uint256 amountTokenOut, uint256 amountETHOut, uint256 liquidity) = aerodromeRouter.addLiquidityETH{
             value: msg.value
-        }(
-            token,
-            true, // assuming stable pool
-            amountToken,
-            amountTokenMin,
-            amountETHMin,
-            address(this),
-            block.timestamp
-        );
+        }(token, poolStable, amountToken, updatedAmountTokenMin, updatedAmountEthMin, address(this), block.timestamp);
         // Update user liquidity
         userLiquidity[msg.sender][token] += amountTokenOut;
         userLiquidity[msg.sender][address(aerodromeRouter.weth())] += amountETHOut;
@@ -179,19 +188,24 @@ contract L2LiquidityManager is Initializable, UUPSUpgradeable, OwnableUpgradeabl
         uint256 amountA,
         uint256 amountB,
         uint256 amountAMin,
-        uint256 amountBMin
+        uint256 amountBMin,
+        bool poolStable
     ) private {
         IERC20(tokenA).approve(address(aerodromeRouter), amountA);
         IERC20(tokenB).approve(address(aerodromeRouter), amountB);
 
+        // calculate minimum amount with 0.1% slippage
+        uint256 updatedAmountAMin = mulDiv(amountAMin, FEE_DENOMINATOR - LIQ_SLIPPAGE, FEE_DENOMINATOR);
+        uint256 updatedAmountBMin = mulDiv(amountBMin, FEE_DENOMINATOR - LIQ_SLIPPAGE, FEE_DENOMINATOR);
+
         (uint256 amountAOut, uint256 amountBOut, uint256 liquidity) = aerodromeRouter.addLiquidity(
             tokenA,
             tokenB,
-            true, // assuming stable pool, adjust if needed
+            poolStable,
             amountA,
             amountB,
-            amountAMin,
-            amountBMin,
+            updatedAmountAMin,
+            updatedAmountBMin,
             address(this),
             block.timestamp
         );
@@ -226,4 +240,58 @@ contract L2LiquidityManager is Initializable, UUPSUpgradeable, OwnableUpgradeabl
 
     receive() external payable {}
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+
+    // Helper function for safe multiplication and division
+    function mulDiv(uint256 x, uint256 y, uint256 denominator) internal pure returns (uint256 result) {
+        uint256 prod0;
+        uint256 prod1;
+        assembly {
+            let mm := mulmod(x, y, not(0))
+            prod0 := mul(x, y)
+            prod1 := sub(sub(mm, prod0), lt(mm, prod0))
+        }
+
+        if (prod1 == 0) {
+            require(denominator > 0);
+            assembly {
+                result := div(prod0, denominator)
+            }
+            return result;
+        }
+
+        require(denominator > prod1);
+
+        uint256 remainder;
+        assembly {
+            remainder := mulmod(x, y, denominator)
+        }
+        assembly {
+            prod1 := sub(prod1, gt(remainder, prod0))
+            prod0 := sub(prod0, remainder)
+        }
+
+        uint256 twos = denominator & (~denominator + 1);
+        assembly {
+            denominator := div(denominator, twos)
+        }
+
+        assembly {
+            prod0 := div(prod0, twos)
+        }
+        assembly {
+            twos := add(div(sub(0, twos), twos), 1)
+        }
+        prod0 |= prod1 * twos;
+
+        uint256 inv = (3 * denominator) ^ 2;
+        inv *= 2 - denominator * inv;
+        inv *= 2 - denominator * inv;
+        inv *= 2 - denominator * inv;
+        inv *= 2 - denominator * inv;
+        inv *= 2 - denominator * inv;
+        inv *= 2 - denominator * inv;
+
+        result = prod0 * inv;
+        return result;
+    }
 }
