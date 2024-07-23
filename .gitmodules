@@ -10,3 +10,6 @@
 [submodule "lib/contracts"]
 	path = lib/contracts
 	url = https://github.com/@layerzerolabs/lz-evm-protocol-v2/contracts
+[submodule "lib/LayerZero-v2"]
+	path = lib/LayerZero-v2
+	url = https://github.com/LayerZero-Labs/LayerZero-v2
