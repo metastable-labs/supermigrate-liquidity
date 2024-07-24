@@ -13,8 +13,9 @@ import {IGauge} from "@aerodrome/contracts/contracts/interfaces/IGauge.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/ContextUpgradeable.sol";
 
-contract L2LiquidityManager is Initializable, UUPSUpgradeable, OwnableUpgradeable, ReentrancyGuardUpgradeable {
+contract L2LiquidityManager is Initializable, ContextUpgradeable, UUPSUpgradeable, OwnableUpgradeable, ReentrancyGuardUpgradeable {
     IRouter public aerodromeRouter;
     PoolData[] private allPools;
     mapping(address => bool) private poolExists;
@@ -49,6 +50,7 @@ contract L2LiquidityManager is Initializable, UUPSUpgradeable, OwnableUpgradeabl
     }
 
     function initialize(address _aerodromeRouter, address _feeReceiver, uint256 _migrationFee) public initializer {
+        __Context_init();
         __Ownable_init(msg.sender);
         __UUPSUpgradeable_init();
         __ReentrancyGuard_init();
@@ -71,6 +73,11 @@ contract L2LiquidityManager is Initializable, UUPSUpgradeable, OwnableUpgradeabl
         }
 
         emit PoolSet(tokenA, tokenB, pool, gauge);
+    }
+
+    function setFee(uint256 _newFee) external onlyOwner {
+        require(_newFee <= FEE_DENOMINATOR, "Fee too high");
+        migrationFee = _newFee;
     }
 
     function getPool(address tokenA, address tokenB) external view returns (address pool, address gauge) {
@@ -120,6 +127,18 @@ contract L2LiquidityManager is Initializable, UUPSUpgradeable, OwnableUpgradeabl
         return userStakedLPTokens[user][pool];
     }
 
+    function deductFee(address token, uint256 amount) private returns (uint256) {
+        uint256 feeAmount = (amount * migrationFee) / FEE_DENOMINATOR;
+        if(token == address(aerodromeRouter.weth())) {
+            aerodromeRouter.weth().deposit{value: feeAmount}();
+            IERC20(aerodromeRouter.weth()).transfer(feeReceiver, feeAmount);
+        }
+        else{
+            IERC20(token).transferFrom(_msgSender(), feeReceiver, feeAmount);
+        }
+        return amount - feeAmount;
+    }
+
     function depositLiquidity(
         address tokenA,
         address tokenB,
@@ -151,6 +170,9 @@ contract L2LiquidityManager is Initializable, UUPSUpgradeable, OwnableUpgradeabl
         }
     }
 
+/**
+ * Assuming that amountTokenMin is calculated after deducting migration fees in the front end.
+ */
     function _depositLiquidityETH(
         address token,
         uint256 amountToken,
@@ -160,20 +182,23 @@ contract L2LiquidityManager is Initializable, UUPSUpgradeable, OwnableUpgradeabl
     ) private {
         IERC20(token).approve(address(aerodromeRouter), amountToken);
 
+        amountToken = deductFee(token, amountToken);
+        uint256 ethAmount = deductFee(address(aerodromeRouter.weth()), msg.value);
+
         // calculate minimum amount with 0.1% slippage
         uint256 updatedAmountTokenMin = mulDiv(amountTokenMin, FEE_DENOMINATOR - LIQ_SLIPPAGE, FEE_DENOMINATOR);
         uint256 updatedAmountEthMin = mulDiv(amountETHMin, FEE_DENOMINATOR - LIQ_SLIPPAGE, FEE_DENOMINATOR);
 
         (uint256 amountTokenOut, uint256 amountETHOut, uint256 liquidity) = aerodromeRouter.addLiquidityETH{
-            value: msg.value
+            value: ethAmount
         }(token, poolStable, amountToken, updatedAmountTokenMin, updatedAmountEthMin, address(this), block.timestamp);
         // Update user liquidity
         userLiquidity[msg.sender][token] += amountTokenOut;
         userLiquidity[msg.sender][address(aerodromeRouter.weth())] += amountETHOut;
 
         // Refund excess ETH if any
-        if (msg.value > amountETHOut) {
-            (bool success,) = msg.sender.call{value: msg.value - amountETHOut}("");
+        if (ethAmount > amountETHOut) {
+            (bool success,) = msg.sender.call{value: ethAmount - amountETHOut}("");
             require(success, "ETH transfer failed");
         }
 
@@ -182,6 +207,9 @@ contract L2LiquidityManager is Initializable, UUPSUpgradeable, OwnableUpgradeabl
         );
     }
 
+/**
+ * Assuming that amountAMin and amountBMin are calculated after deducting the migration fees in the front end.
+ */
     function _depositLiquidityERC20(
         address tokenA,
         address tokenB,
@@ -193,6 +221,9 @@ contract L2LiquidityManager is Initializable, UUPSUpgradeable, OwnableUpgradeabl
     ) private {
         IERC20(tokenA).approve(address(aerodromeRouter), amountA);
         IERC20(tokenB).approve(address(aerodromeRouter), amountB);
+
+        amountA = deductFee(tokenA, amountA);
+        amountB = deductFee(tokenB, amountB);
 
         // calculate minimum amount with 0.1% slippage
         uint256 updatedAmountAMin = mulDiv(amountAMin, FEE_DENOMINATOR - LIQ_SLIPPAGE, FEE_DENOMINATOR);
