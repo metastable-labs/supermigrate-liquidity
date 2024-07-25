@@ -232,7 +232,6 @@ abstract contract LiquidityMigration is OApp {
         external
         returns (bytes4)
     {
-        // You can add custom logic here if needed
         return this.onERC721Received.selector;
     }
 
@@ -267,9 +266,6 @@ abstract contract LiquidityMigration is OApp {
         (amountA, amountB) = IUniswapV2Router02(uniswapV2Router).removeLiquidity(
             tokenA, tokenB, liquidity, amountAMin, amountBMin, address(this), deadline
         );
-
-        // Prepare tokens for bridging (if needed)
-        // For example, you might need to wrap ETH to WETH here if one of the tokens is ETH
 
         return (amountA, amountB);
     }
@@ -316,9 +312,6 @@ abstract contract LiquidityMigration is OApp {
 
         // Check minimum amounts
         require(amount0 >= amountAMin && amount1 >= amountBMin, "Slippage check failed");
-
-        // Burn the NFT if desired (optional)
-        // nonfungiblePositionManager.burn(tokenId);
 
         return token0 == tokenA ? (amount0, amount1) : (amount1, amount0);
     }
