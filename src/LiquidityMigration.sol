@@ -156,7 +156,7 @@ interface StandardBridge {
     function OTHER_BRIDGE() external view returns (address);
 }
 
-abstract contract LiquidityMigration is OApp {
+contract LiquidityMigration is OApp {
     IUniswapV2Factory public immutable uniswapV2Factory;
     IUniswapV2Router02 public immutable uniswapV2Router;
     IUniswapV3Factory public immutable uniswapV3Factory;
@@ -167,6 +167,13 @@ abstract contract LiquidityMigration is OApp {
 
     event LiquidityRemoved(address tokenA, address tokenB, uint256 amountA, uint256 amountB);
     event TokensBridged(address token, uint256 amount);
+
+    enum PoolType {
+        NONE,
+        STABLE,
+        VOLATILE,
+        CONCENTRATED
+    }
 
     constructor(
         address _endpoint,
@@ -197,7 +204,8 @@ abstract contract LiquidityMigration is OApp {
         uint256 amountBMin,
         uint256 deadline,
         uint32 minGasLimit,
-        bytes calldata _options
+        bytes calldata _options,
+        PoolType poolType
     ) external payable returns (MessagingReceipt memory receipt) {
         require(tokenA != tokenB, "Identical addresses");
 
@@ -210,7 +218,7 @@ abstract contract LiquidityMigration is OApp {
         _bridgeToken(tokenA, l2TokenA, amountA, minGasLimit, "Supermigrate Liquidity");
         _bridgeToken(tokenB, l2TokenB, amountB, minGasLimit, "Supermigrate Liquidity");
 
-        bytes memory payload = abi.encode(tokenA, tokenB, amountA, amountB, msg.sender);
+        bytes memory payload = abi.encode(tokenA, tokenB, amountA, amountB, msg.sender, poolType);
         receipt = _lzSend(_dstEid, payload, _options, MessagingFee(msg.value, 0), payable(msg.sender));
 
         return receipt;
@@ -331,5 +339,27 @@ abstract contract LiquidityMigration is OApp {
             l1StandardBridge.bridgeERC20To(localToken, l2Token, l2LiquidityManager, amount, minGasLimit, extraData);
         }
         emit TokensBridged(l2Token, amount);
+    }
+
+    function _lzReceive(
+        Origin calldata _origin,
+        bytes32 _guid,
+        bytes calldata _message,
+        address _executor,
+        bytes calldata _extraData
+    ) internal virtual override {
+        // This contract doesn't receive messages, so we can leave this empty or revert
+        revert("CrossChainLiquidityMigration does not receive messages");
+    }
+
+    function _authorized() internal view returns (bool) {
+        return msg.sender == owner();
+    }
+
+    function _setConfig(uint32 _version, uint32 _dstEid, uint256 _outboundConfirmations, uint256 _inboundConfirmations)
+        external
+        onlyOwner
+    {
+        // _setConfig(_version, _dstEid, _outboundConfirmations, _inboundConfirmations);
     }
 }
