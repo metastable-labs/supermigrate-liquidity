@@ -204,7 +204,35 @@ abstract contract LiquidityMigration is OApp {
         return false;
     }
 
-    function removeV3Liquidity(
+    function _removeV2Liquidity(
+        address tokenA,
+        address tokenB,
+        uint256 liquidity,
+        uint256 amountAMin,
+        uint256 amountBMin,
+        uint256 deadline
+    ) internal returns (uint256 amountA, uint256 amountB) {
+        address pair = IUniswapV2Factory(uniswapV2Factory).getPair(tokenA, tokenB);
+        require(pair != address(0), "V2: Pool does not exist");
+
+        // Transfer LP tokens from user to this contract
+        IERC20(pair).transferFrom(msg.sender, address(this), liquidity);
+
+        // Approve the router to spend the LP tokens
+        IERC20(pair).approve(address(uniswapV2Router), liquidity);
+
+        // Remove liquidity
+        (amountA, amountB) = IUniswapV2Router02(uniswapV2Router).removeLiquidity(
+            tokenA, tokenB, liquidity, amountAMin, amountBMin, address(this), deadline
+        );
+
+        // Prepare tokens for bridging (if needed)
+        // For example, you might need to wrap ETH to WETH here if one of the tokens is ETH
+
+        return (amountA, amountB);
+    }
+
+    function _removeV3Liquidity(
         address tokenA,
         address tokenB,
         uint256 tokenId,
