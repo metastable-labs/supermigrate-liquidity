@@ -186,6 +186,48 @@ abstract contract LiquidityMigration is OApp {
         l2LiquidityManager = _l2LiquidityManager;
     }
 
+    function migrateERC20Liquidity(
+        uint32 _dstEid,
+        address tokenA,
+        address tokenB,
+        address l2TokenA,
+        address l2TokenB,
+        uint256 liquidity,
+        uint256 amountAMin,
+        uint256 amountBMin,
+        uint256 deadline,
+        uint32 minGasLimit,
+        bytes calldata _options
+    ) external payable returns (MessagingReceipt memory receipt) {
+        require(tokenA != tokenB, "Identical addresses");
+
+        (uint256 amountA, uint256 amountB) = isV3Pool(tokenA, tokenB)
+            ? _removeV3Liquidity(tokenA, tokenB, liquidity, amountAMin, amountBMin, deadline)
+            : _removeV2Liquidity(tokenA, tokenB, liquidity, amountAMin, amountBMin, deadline);
+
+        emit LiquidityRemoved(tokenA, tokenB, amountA, amountB);
+
+        _bridgeToken(tokenA, l2TokenA, amountA, minGasLimit, "Supermigrate Liquidity");
+        _bridgeToken(tokenB, l2TokenB, amountB, minGasLimit, "Supermigrate Liquidity");
+
+        bytes memory payload = abi.encode(tokenA, tokenB, amountA, amountB, msg.sender);
+        receipt = _lzSend(_dstEid, payload, _options, MessagingFee(msg.value, 0), payable(msg.sender));
+
+        return receipt;
+    }
+
+    function quote(
+        uint32 _dstEid,
+        address tokenA,
+        address tokenB,
+        uint256 liquidity,
+        bytes memory _options,
+        bool _payInLzToken
+    ) public view returns (MessagingFee memory fee) {
+        bytes memory payload = abi.encode(tokenA, tokenB, liquidity, msg.sender);
+        fee = _quote(_dstEid, payload, _options, _payInLzToken);
+    }
+
     function onERC721Received(address operator, address from, uint256 tokenId, bytes calldata data)
         external
         returns (bytes4)
