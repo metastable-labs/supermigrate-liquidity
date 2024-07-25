@@ -2,93 +2,17 @@
 pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
+import "./MockERC20.sol";
+import "./MockWETH.sol";
+import "./MockAerodromeRouter.sol";
 import "../src/modules/L2LiquidityManager.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract MockERC20 is ERC20, Ownable {
-    constructor(
-        string memory name,
-        string memory symbol
-    ) ERC20(name, symbol) Ownable(msg.sender) {}
-
-    function mint(address account, uint256 amount) external onlyOwner {
-        _mint(account, amount);
-    }
-}
-
-interface IWETH is IERC20 {
-    function deposit() external payable;
-
-    function withdraw(uint256) external;
-}
-
-contract MockWETH is ERC20, IWETH {
-    constructor() ERC20("Wrapped Ether", "WETH") {}
-
-    function deposit() external payable override {
-        require(msg.value > 0);
-        _mint(msg.sender, msg.value);
-    }
-
-    function withdraw(uint256 amount) external override {
-        require(balanceOf(msg.sender) >= amount, "Insufficient balance");
-        _burn(msg.sender, amount);
-        payable(msg.sender).transfer(amount);
-    }
-}
 
 contract MockFeeRecipient {}
-
-contract MockAerodromeRouter {
-    IWETH public immutable wethToken;
-
-    constructor(address _weth) {
-        wethToken = IWETH(_weth);
-    }
-
-    function addLiquidity(
-        address tokenA,
-        address tokenB,
-        bool stable,
-        uint amountADesired,
-        uint amountBDesired,
-        uint amountAMin,
-        uint amountBMin,
-        address to,
-        uint deadline
-    ) external returns (uint amountA, uint amountB, uint liquidity) {
-        // Mock implementation
-        return (amountADesired, amountBDesired, 100);
-    }
-
-    function addLiquidityETH(
-        address token,
-        bool stable,
-        uint amountTokenDesired,
-        uint amountTokenMin,
-        uint amountETHMin,
-        address to,
-        uint deadline
-    )
-        external
-        payable
-        returns (uint amountToken, uint amountETH, uint liquidity)
-    {
-        // Mock implementation
-        wethToken.deposit{value: msg.value}();
-
-        // Transfer WETH to the caller (which would be the L2LiquidityManager contract)
-        wethToken.transfer(msg.sender, msg.value);
-        return (amountTokenDesired, msg.value, 100);
-    }
-
-    function weth() external view returns (IWETH) {
-        return wethToken;
-    }
-}
 
 contract L2LiquidityManagerTest is Test {
     L2LiquidityManager public liquidityManager;
