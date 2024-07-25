@@ -10,14 +10,24 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
+contract MockFeeRecipient {}
+contract MockEndpoint {
+    address public delegate;
+
+    function setDelegate(address _delegate) external {
+        delegate = _delegate;
+    }
+}
 contract L2LiquidityManagerTest is Test {
     L2LiquidityManager public liquidityManager;
+    MockFeeRecipient public mockFeeRecipient;
     MockERC20 public tokenA;
     MockERC20 public tokenB;
     MockWETH public weth;
     MockAerodromeRouter public router;
     address public owner;
     address public user;
+    MockEndpoint public endpoint;
 
     function setUp() public {
         owner = address(this);
@@ -27,17 +37,18 @@ contract L2LiquidityManagerTest is Test {
         router = new MockAerodromeRouter(address(weth));
         tokenA = new MockERC20("Token A", "TKNA");
         tokenB = new MockERC20("Token B", "TKNB");
+        mockFeeRecipient = new MockFeeRecipient();
+        endpoint = new MockEndpoint();
 
-        L2LiquidityManager impl = new L2LiquidityManager();
-        bytes memory data = abi.encodeWithSelector(
-            L2LiquidityManager.initialize.selector,
-            address(router),
-            address(0x2), // fee receiver
-            100 // 1% migration fee
-        );
-        ERC1967Proxy proxy = new ERC1967Proxy(address(impl), data);
-        liquidityManager = L2LiquidityManager(payable(address(proxy)));
+        //liquidityManager = new L2LiquidityManager(address(router), address(mockFeeRecipient), 100, address(endpoint), owner);
 
+        try new L2LiquidityManager(address(router), address(mockFeeRecipient), 100, address(endpoint), owner) returns (L2LiquidityManager _liquidityManager) {
+            liquidityManager = _liquidityManager;
+        } catch Error(string memory reason) {
+            console.log("L2LiquidityManager creation failed:", reason);
+            revert(reason);
+        }
+       
         address mockPool = address(0x3);
         address mockGauge = address(0x4);
         liquidityManager.setPool(address(tokenA), address(tokenB), mockPool, mockGauge);
@@ -57,14 +68,14 @@ contract L2LiquidityManagerTest is Test {
         tokenB.approve(address(router), amountB);
 
 
-        liquidityManager.depositLiquidity(
+        liquidityManager._depositLiquidity(
             address(tokenA),
             address(tokenB),
             amountA,
             amountB,
             amountA,
             amountB,
-            false
+            L2LiquidityManager.PoolType.STABLE
         );
         vm.stopPrank();
 
@@ -83,14 +94,14 @@ contract L2LiquidityManagerTest is Test {
         tokenA.approve(address(liquidityManager), amountToken);
         tokenA.approve(address(router), amountToken);
 
-        liquidityManager.depositLiquidity{value: amountETH}(
+        liquidityManager._depositLiquidity{value: amountETH}(
             address(weth),
             address(tokenA),
             amountETH,
             amountToken,
             amountETH,
             amountToken,
-            false
+            L2LiquidityManager.PoolType.STABLE
         );
         vm.stopPrank();
 
@@ -111,14 +122,14 @@ contract L2LiquidityManagerTest is Test {
 
         //vm.expectRevert("ERC20: transfer amount exceeds balance");
         vm.expectRevert();
-        liquidityManager.depositLiquidity(
+        liquidityManager._depositLiquidity(
             address(tokenA),
             address(tokenB),
             amountA,
             amountB,
             amountA,
             amountB,
-            false
+            L2LiquidityManager.PoolType.STABLE
         );
         vm.stopPrank();
     }
@@ -132,14 +143,14 @@ contract L2LiquidityManagerTest is Test {
         tokenA.approve(address(liquidityManager), amountToken);
 
         vm.expectRevert("Must send ETH");
-        liquidityManager.depositLiquidity(
+        liquidityManager._depositLiquidity(
             address(weth),
             address(tokenA),
             amountETH,
             amountToken,
             amountETH,
             amountToken,
-            false
+            L2LiquidityManager.PoolType.STABLE
         );
         vm.stopPrank();
     }
@@ -155,14 +166,14 @@ contract L2LiquidityManagerTest is Test {
         tokenB.approve(address(liquidityManager), amountB);
 
         vm.expectRevert("Pool does not exist");
-        liquidityManager.depositLiquidity(
+        liquidityManager._depositLiquidity(
             address(tokenA),
             address(0x5), // non-existent token
             amountA,
             amountB,
             amountA,
             amountB,
-            false
+            L2LiquidityManager.PoolType.STABLE
         );
         vm.stopPrank();
     }

@@ -14,6 +14,14 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 
 contract MockFeeRecipient {}
 
+contract MockEndpoint {
+    address public delegate;
+
+    function setDelegate(address _delegate) external {
+        delegate = _delegate;
+    }
+}
+
 contract L2LiquidityManagerTest is Test {
     L2LiquidityManager public liquidityManager;
     MockERC20 public tokenA;
@@ -21,30 +29,23 @@ contract L2LiquidityManagerTest is Test {
     MockWETH public weth;
     MockAerodromeRouter public mockRouter;
     MockFeeRecipient public mockFeeRecipient;
+    MockEndpoint public endpoint;
     address public user;
-
+    address public owner;
+    
     function setUp() public {
+        owner = address(this);
         weth = new MockWETH();
+        endpoint = new MockEndpoint();
         mockRouter = new MockAerodromeRouter(address(weth));
+        owner = address(this);
         mockFeeRecipient = new MockFeeRecipient();
-        L2LiquidityManager impl = new L2LiquidityManager();
+        liquidityManager = new L2LiquidityManager(address(mockRouter), address(mockFeeRecipient), 100, address(endpoint), owner);
         user = address(0x1);
-
-        bytes memory data = abi.encodeWithSelector(
-            L2LiquidityManager.initialize.selector,
-            address(mockRouter),
-            address(mockFeeRecipient),
-            100 //1% fee
-        );
-
-        // Deploy the proxy
-        ERC1967Proxy proxy = new ERC1967Proxy(address(impl), data);
-
-        // Cast the proxy to L2LiquidityManager
-        liquidityManager = L2LiquidityManager(payable(address(proxy)));
 
         tokenA = new MockERC20("Token A", "TKNA");
         tokenB = new MockERC20("Token B", "TKNB");
+        endpoint = new MockEndpoint();
 
         tokenA.mint(address(this), 1000 ether);
         tokenB.mint(address(this), 1000 ether);
@@ -81,14 +82,14 @@ contract L2LiquidityManagerTest is Test {
         tokenA.approve(address(mockRouter), amountA);
         tokenB.approve(address(mockRouter), amountB);
 
-        liquidityManager.depositLiquidity(
+        liquidityManager._depositLiquidity(
             address(tokenA),
             address(tokenB),
             amountA,
             amountB,
             amountAMin,
             amountBMin,
-            false
+            L2LiquidityManager.PoolType.STABLE
         );
 
         vm.stopPrank();
@@ -134,14 +135,14 @@ contract L2LiquidityManagerTest is Test {
         tokenA.approve(address(liquidityManager), amountToken);
         tokenA.approve(address(mockRouter), amountToken);
 
-        liquidityManager.depositLiquidity{value: amountETH}(
+        liquidityManager._depositLiquidity{value: amountETH}(
             address(weth),
             address(tokenA),
             amountETH,
             amountToken,
             amountETHMin,
             amountTokenMin,
-            false
+            L2LiquidityManager.PoolType.STABLE
         );
 
         vm.stopPrank();
@@ -198,14 +199,14 @@ contract L2LiquidityManagerTest is Test {
         tokenA.approve(address(mockRouter), amountA);
         tokenB.approve(address(mockRouter), amountB);
 
-        liquidityManager.depositLiquidity(
+        liquidityManager._depositLiquidity(
             address(tokenA),
             address(tokenB),
             amountA,
             amountB,
             amountA,
             amountB,
-            false
+            L2LiquidityManager.PoolType.STABLE
         );
 
         vm.stopPrank();
@@ -241,14 +242,14 @@ contract L2LiquidityManagerTest is Test {
         tokenA.approve(address(mockRouter), amountA);
         tokenB.approve(address(mockRouter), amountB);
 
-        liquidityManager.depositLiquidity(
+        liquidityManager._depositLiquidity(
             address(tokenA),
             address(tokenB),
             amountA,
             amountB,
             amountA,
             amountB,
-            false
+            L2LiquidityManager.PoolType.STABLE
         );
 
         vm.stopPrank();

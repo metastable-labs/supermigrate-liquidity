@@ -9,6 +9,7 @@ cbor_metadata = false
 evm_version = "cancun"
 optimizer = true
 optimizer_runs = 1_000_000
+viaIR = true
 
 [etherscan]
 base-sepolia = {key = "$ETHERSCAN_API_KEY", url = "https://api-sepolia.basescan.org/api"}

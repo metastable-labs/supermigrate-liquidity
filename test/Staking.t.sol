@@ -14,6 +14,15 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Context.sol";
 
+contract MockFeeRecipient {}
+
+contract MockEndpoint {
+    address public delegate;
+
+    function setDelegate(address _delegate) external {
+        delegate = _delegate;
+    }
+}
 
 contract L2LiquidityManagerTest is Test {
     L2LiquidityManager public liquidityManager;
@@ -21,6 +30,8 @@ contract L2LiquidityManagerTest is Test {
     MockERC20 public rewardToken;
     MockGauge public gauge;
     MockAerodromeRouter public router;
+    MockFeeRecipient public mockFeeRecipient;
+    MockEndpoint public endpoint;
     address public owner;
     address public user;
 
@@ -32,16 +43,11 @@ contract L2LiquidityManagerTest is Test {
         rewardToken = new MockERC20("Reward Token", "RWD");
         router = new MockAerodromeRouter(address(0x8));
         gauge = new MockGauge(lpToken, rewardToken, address(this));
+        mockFeeRecipient = new MockFeeRecipient();
+        endpoint = new MockEndpoint();
 
-        L2LiquidityManager impl = new L2LiquidityManager();
-        bytes memory data = abi.encodeWithSelector(
-            L2LiquidityManager.initialize.selector,
-            address(router),
-            address(0x3), // mock fee receiver
-            100 // 1% migration fee
-        );
-        ERC1967Proxy proxy = new ERC1967Proxy(address(impl), data);
-        liquidityManager = L2LiquidityManager(payable(address(proxy)));
+        liquidityManager = new L2LiquidityManager(address(router), address(mockFeeRecipient), 100,  address(endpoint), owner);
+
 
         liquidityManager.setPool(address(0x4), address(0x5), address(lpToken), address(gauge));
     }

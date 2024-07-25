@@ -10,26 +10,27 @@ import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
+contract MockEndpoint {
+    address public delegate;
+
+    function setDelegate(address _delegate) external {
+        delegate = _delegate;
+    }
+}
 contract L2LiquidityManagerTest is Test {
     L2LiquidityManager public liquidityManager;
     address public owner;
     address public mockRouter;
     address public mockFeeReceiver;
+    MockEndpoint public endpoint;
 
     function setUp() public {
         owner = address(this);
         mockRouter = address(0x1);
         mockFeeReceiver = address(0x2);
+        endpoint = new MockEndpoint();
 
-        L2LiquidityManager impl = new L2LiquidityManager();
-        bytes memory data = abi.encodeWithSelector(
-            L2LiquidityManager.initialize.selector,
-            mockRouter,
-            mockFeeReceiver,
-            100 // 1% migration fee
-        );
-        ERC1967Proxy proxy = new ERC1967Proxy(address(impl), data);
-        liquidityManager = L2LiquidityManager(payable(address(proxy)));
+        liquidityManager = new L2LiquidityManager(address(mockRouter), address(mockFeeReceiver), 100, address(endpoint), owner);
     }
 
 function testSetPoolSuccess() public {
