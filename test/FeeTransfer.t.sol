@@ -2,9 +2,9 @@
 pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
-import "./MockERC20.sol";
-import "./MockWETH.sol";
-import "./MockAerodromeRouter.sol";
+import "./mocks/MockERC20.sol";
+import "./mocks/MockWETH.sol";
+import "./mocks/MockAerodromeRouter.sol";
 import "../src/modules/L2LiquidityManager.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
@@ -21,12 +21,14 @@ contract L2LiquidityManagerTest is Test {
     MockWETH public weth;
     MockAerodromeRouter public mockRouter;
     MockFeeRecipient public mockFeeRecipient;
+    address public user;
 
     function setUp() public {
         weth = new MockWETH();
         mockRouter = new MockAerodromeRouter(address(weth));
         mockFeeRecipient = new MockFeeRecipient();
         L2LiquidityManager impl = new L2LiquidityManager();
+        user = address(0x1);
 
         bytes memory data = abi.encodeWithSelector(
             L2LiquidityManager.initialize.selector,
@@ -69,8 +71,15 @@ contract L2LiquidityManagerTest is Test {
         uint256 amountAMin = 99 ether;
         uint256 amountBMin = 198 ether;
 
+        tokenA.mint(user, amountA);
+        tokenB.mint(user, amountB);
+
+        vm.startPrank(user, user);
+
         tokenA.approve(address(liquidityManager), amountA);
         tokenB.approve(address(liquidityManager), amountB);
+        tokenA.approve(address(mockRouter), amountA);
+        tokenB.approve(address(mockRouter), amountB);
 
         liquidityManager.depositLiquidity(
             address(tokenA),
@@ -82,17 +91,19 @@ contract L2LiquidityManagerTest is Test {
             false
         );
 
+        vm.stopPrank();
+
         // Check if fees were deducted correctly (1% fee)
         uint256 expectedAmountAfterFeeA = 99 ether;
         uint256 expectedAmountAfterFeeB = 198 ether;
 
         assertEq(
-            liquidityManager.getUserLiquidity(address(this), address(tokenA)),
+            liquidityManager.getUserLiquidity(address(user), address(tokenA)),
             expectedAmountAfterFeeA,
             "Incorrect tokenA liquidity"
         );
         assertEq(
-            liquidityManager.getUserLiquidity(address(this), address(tokenB)),
+            liquidityManager.getUserLiquidity(address(user), address(tokenB)),
             expectedAmountAfterFeeB,
             "Incorrect tokenB liquidity"
         );
@@ -116,8 +127,12 @@ contract L2LiquidityManagerTest is Test {
         uint256 amountETHMin = 0.99 ether;
         uint256 amountTokenMin = 99 ether;
 
-        tokenA.mint(address(this), amountToken);
+        tokenA.mint(user, amountToken);
+        vm.deal(user, amountETH);
+        vm.startPrank(user, user);
+
         tokenA.approve(address(liquidityManager), amountToken);
+        tokenA.approve(address(mockRouter), amountToken);
 
         liquidityManager.depositLiquidity{value: amountETH}(
             address(weth),
@@ -129,17 +144,19 @@ contract L2LiquidityManagerTest is Test {
             false
         );
 
+        vm.stopPrank();
+
         // Check if fees were deducted correctly (1% fee)
         uint256 expectedAmountAfterFeeETH = 0.99 ether;
         uint256 expectedAmountAfterFeeToken = 99 ether;
 
         assertEq(
-            liquidityManager.getUserLiquidity(address(this), address(weth)),
+            liquidityManager.getUserLiquidity(user, address(weth)),
             expectedAmountAfterFeeETH,
             "Incorrect ETH liquidity"
         );
         assertEq(
-            liquidityManager.getUserLiquidity(address(this), address(tokenA)),
+            liquidityManager.getUserLiquidity(user, address(tokenA)),
             expectedAmountAfterFeeToken,
             "Incorrect tokenA liquidity"
         );
@@ -170,10 +187,16 @@ contract L2LiquidityManagerTest is Test {
         uint256 expectedFeeB = (amountB * liquidityManager.migrationFee()) /
             liquidityManager.FEE_DENOMINATOR();
 
-        tokenA.mint(address(this), amountA);
-        tokenB.mint(address(this), amountB);
+        tokenA.mint(user, amountA);
+        tokenB.mint(user, amountB);
+
+        vm.startPrank(user, user);
+
         tokenA.approve(address(liquidityManager), amountA);
         tokenB.approve(address(liquidityManager), amountB);
+
+        tokenA.approve(address(mockRouter), amountA);
+        tokenB.approve(address(mockRouter), amountB);
 
         liquidityManager.depositLiquidity(
             address(tokenA),
@@ -184,6 +207,8 @@ contract L2LiquidityManagerTest is Test {
             amountB,
             false
         );
+
+        vm.stopPrank();
 
         assertEq(
             tokenA.balanceOf(liquidityManager.feeReceiver()),
@@ -202,13 +227,19 @@ contract L2LiquidityManagerTest is Test {
         uint256 amountB = 200 ether;
         uint256 incorrectFee = 2000; // 20% fee, overriding original 1%
 
-        tokenA.mint(address(this), amountA);
-        tokenB.mint(address(this), amountB);
+        vm.prank(address(this));
+
+        liquidityManager.setFee(incorrectFee);
+
+        tokenA.mint(user, amountA);
+        tokenB.mint(user, amountB);
+
+        vm.startPrank(user, user);
 
         tokenA.approve(address(liquidityManager), amountA);
         tokenB.approve(address(liquidityManager), amountB);
-
-        liquidityManager.setFee(incorrectFee);
+        tokenA.approve(address(mockRouter), amountA);
+        tokenB.approve(address(mockRouter), amountB);
 
         liquidityManager.depositLiquidity(
             address(tokenA),
@@ -220,16 +251,18 @@ contract L2LiquidityManagerTest is Test {
             false
         );
 
+        vm.stopPrank();
+
         uint256 expectedAmountAfterFeeA = 80 ether; // 100 - 20% fee
         uint256 expectedAmountAfterFeeB = 160 ether; // 200 - 20% fee
 
         assertEq(
-            liquidityManager.getUserLiquidity(address(this), address(tokenA)),
+            liquidityManager.getUserLiquidity(address(user), address(tokenA)),
             expectedAmountAfterFeeA,
             "Incorrect tokenA liquidity after wrong fee"
         );
         assertEq(
-            liquidityManager.getUserLiquidity(address(this), address(tokenB)),
+            liquidityManager.getUserLiquidity(address(user), address(tokenB)),
             expectedAmountAfterFeeB,
             "Incorrect tokenB liquidity after wrong fee"
         );

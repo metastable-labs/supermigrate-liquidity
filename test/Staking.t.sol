@@ -3,10 +3,10 @@ pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
 import "forge-std/console.sol";
-import "./MockERC20.sol";
-import "./MockWETH.sol";
-import "./MockGauge.sol";
-import "./MockAerodromeRouter.sol";
+import "./mocks/MockERC20.sol";
+import "./mocks/MockWETH.sol";
+import "./mocks/MockGauge.sol";
+import "./mocks/MockAerodromeRouter.sol";
 import "../src/modules/L2LiquidityManager.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
