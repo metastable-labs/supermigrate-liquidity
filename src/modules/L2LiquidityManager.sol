@@ -40,7 +40,7 @@ contract L2LiquidityManager is OApp {
     event LPTokensStaked(address user, address pool, uint256 amount);
     event PoolSet(address tokenA, address tokenB, address pool, address gauge);
     event LPTokensStaked(address user, address pool, address gauge, uint256 amount);
-    event LPTokensWithdrawn(uint256 amount);
+    event LPTokensWithdrawn(address user, address pool, uint256 amount);
     event AeroEmissionsClaimed(address user, address pool, address gauge);
     event CrossChainLiquidityReceived(address user, address tokenA, address tokenB, uint256 amountA, uint256 amountB);
     event TrustedRemoteSet(uint32 indexed srcEid, bytes srcAddress);
@@ -66,7 +66,7 @@ contract L2LiquidityManager is OApp {
     // add a new pool to supermigrate
 
     function setPool(address tokenA, address tokenB, address pool, address gauge) external onlyOwner {
-        require(tokenA != address(0) && tokenB != address(0) && pool != address(0), "Invalid addresses");
+        require(tokenA != address(0) && tokenB != address(0) && tokenA != tokenB && pool != address(0), "Invalid addresses");
         PoolData memory poolData = PoolData(pool, gauge);
         tokenPairToPools[tokenA][tokenB] = poolData;
         tokenPairToPools[tokenB][tokenA] = poolData;
@@ -273,17 +273,26 @@ contract L2LiquidityManager is OApp {
 
     function stakeLPToken(uint256 amount, address owner, address tokenA, address tokenB) external {
         PoolData memory poolData = tokenPairToPools[tokenA][tokenB];
+        require(poolData.poolAddress != address(0), "Pool does not exist");
+
+        IERC20(poolData.poolAddress).transferFrom(msg.sender, address(this), amount);
 
         IERC20(poolData.poolAddress).approve(poolData.gaugeAddress, amount);
         IGauge(poolData.gaugeAddress).deposit(amount, owner);
+        userStakedLPTokens[msg.sender][poolData.poolAddress] += amount;
         emit LPTokensStaked(owner, poolData.poolAddress, poolData.gaugeAddress, amount);
     }
 
     function unstakeLPToken(uint256 amount, address tokenA, address tokenB) external {
         PoolData memory poolData = tokenPairToPools[tokenA][tokenB];
+        require(poolData.poolAddress != address(0), "Pool does not exist");
+
+        require(userStakedLPTokens[msg.sender][poolData.poolAddress] >= amount, "Insufficient staked LP tokens");
 
         IGauge(poolData.gaugeAddress).withdraw(amount);
-        emit LPTokensWithdrawn(amount);
+        userStakedLPTokens[msg.sender][poolData.poolAddress] -= amount;
+        
+        emit LPTokensWithdrawn(msg.sender, poolData.poolAddress, amount);
     }
 
     function claimAeroRewards(address owner, address tokenA, address tokenB) external {

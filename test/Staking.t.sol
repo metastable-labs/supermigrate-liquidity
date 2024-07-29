@@ -62,9 +62,7 @@ function testSuccessfulStaking() public {
     vm.startPrank(user);
     lpToken.approve(address(liquidityManager), amount);
     
-    // Give allowance to the gauge contract on behalf of the user, this has to be done because LP tokens deposit is not implemented inside L2LiquidityManager
-    (, address gaugeAddress) = liquidityManager.getPool(tokenA, tokenB);
-    lpToken.approve(gaugeAddress, amount);
+    (address pool, ) = liquidityManager.getPool(tokenA, tokenB);
     
     liquidityManager.stakeLPToken(amount, user, tokenA, tokenB);
     vm.stopPrank();
@@ -72,9 +70,8 @@ function testSuccessfulStaking() public {
     // Check that the gauge records the correct balance for the user
     assertEq(gauge.balanceOf(user), amount, "Incorrect staked amount in gauge");
     
-    // Disabling Test: Not implemented inside L2LiquidityManager
     // Check that the user's staked LP token balance is updated in L2LiquidityManager
-    // assertEq(liquidityManager.getUserStakedLP(user, pool), amount, "Incorrect staked LP token balance");
+    assertEq(liquidityManager.getUserStakedLP(user, pool), amount, "Incorrect staked LP token balance");
 }
 
     function testStakingZeroAmount() public {
@@ -90,10 +87,9 @@ function testSuccessfulStaking() public {
         
         vm.startPrank(user);
         (, address gaugeAddress) = liquidityManager.getPool(tokenA, tokenB);
-        lpToken.approve(gaugeAddress, amount);
-        //vm.expectRevert("ERC20: transfer amount exceeds balance");
+        lpToken.approve(address(liquidityManager), amount);
         vm.expectRevert();
-        liquidityManager.stakeLPToken(amount, user, address(0x4), address(0x5));
+        liquidityManager.stakeLPToken(amount, user, tokenA, tokenB);
         vm.stopPrank();
     }
 
@@ -139,11 +135,10 @@ function testSuccessfulStaking() public {
         lpToken.mint(user, amount);
         
         vm.startPrank(user, user);
-        (, address gaugeAddress) = liquidityManager.getPool(tokenA, tokenB);
-        lpToken.approve(gaugeAddress, amount);
-        liquidityManager.stakeLPToken(amount, user, address(0x4), address(0x5));
+        lpToken.approve(address(liquidityManager), amount);
+        liquidityManager.stakeLPToken(amount, user, tokenA, tokenB);
         
-        liquidityManager.unstakeLPToken(amount, address(0x4), address(0x5));
+        liquidityManager.unstakeLPToken(amount, tokenA, tokenB);
         vm.stopPrank();
 
         assertEq(gauge.balanceOf(user), 0, "Incorrect unstaked amount");
@@ -157,12 +152,11 @@ function testSuccessfulStaking() public {
         lpToken.mint(user, amount);
         
         vm.startPrank(user);
-        (, address gaugeAddress) = liquidityManager.getPool(tokenA, tokenB);
-        lpToken.approve(gaugeAddress, amount);
-        liquidityManager.stakeLPToken(amount, user, address(0x4), address(0x5));
+        lpToken.approve(address(liquidityManager), amount);
+        liquidityManager.stakeLPToken(amount, user, tokenA, tokenB);
         
-        vm.expectRevert("Insufficient balance");
-        liquidityManager.unstakeLPToken(amount + 1 ether, address(0x4), address(0x5));
+        vm.expectRevert("Insufficient staked LP tokens");
+        liquidityManager.unstakeLPToken(amount + 1 ether, tokenA, tokenB);
         vm.stopPrank();
     }
 
@@ -175,13 +169,12 @@ function testSuccessfulStaking() public {
         rewardToken.mint(address(gauge), rewardAmount);
         
         vm.startPrank(user);
-        (, address gaugeAddress) = liquidityManager.getPool(tokenA, tokenB);
-        lpToken.approve(gaugeAddress, amount);
-        liquidityManager.stakeLPToken(amount, user, address(0x4), address(0x5));
+        lpToken.approve(address(liquidityManager), amount);
+        liquidityManager.stakeLPToken(amount, user, tokenA, tokenB);
         
         gauge.setReward(user, rewardAmount);
         
-        liquidityManager.claimAeroRewards(user, address(0x4), address(0x5));
+        liquidityManager.claimAeroRewards(user, tokenA, tokenB);
         vm.stopPrank();
 
         assertEq(rewardToken.balanceOf(user), rewardAmount, "Incorrect reward amount claimed");
@@ -194,11 +187,10 @@ function testSuccessfulStaking() public {
         lpToken.mint(user, amount);
         
         vm.startPrank(user);
-        (, address gaugeAddress) = liquidityManager.getPool(tokenA, tokenB);
-        lpToken.approve(gaugeAddress, amount);
-        liquidityManager.stakeLPToken(amount, user, address(0x4), address(0x5));
+        lpToken.approve(address(liquidityManager), amount);
+        liquidityManager.stakeLPToken(amount, user, tokenA, tokenB);
         
-        liquidityManager.claimAeroRewards(user, address(0x4), address(0x5));
+        liquidityManager.claimAeroRewards(user, tokenA, tokenB);
         vm.stopPrank();
 
         assertEq(rewardToken.balanceOf(user), 0, "Should not receive rewards when none accrued");
@@ -212,13 +204,12 @@ function testSuccessfulStaking() public {
         
         vm.startPrank(user);
         lpToken.approve(address(liquidityManager), amount);
-        (, address gaugeAddress) = liquidityManager.getPool(tokenA, tokenB);
-        lpToken.approve(gaugeAddress, amount);
+        lpToken.approve(address(liquidityManager), amount);
         
         vm.expectEmit(true, true, true, true);
         emit L2LiquidityManager.LPTokensStaked(user, address(lpToken), address(gauge), amount);
         
-        liquidityManager.stakeLPToken(amount, user, address(0x4), address(0x5));
+        liquidityManager.stakeLPToken(amount, user, tokenA, tokenB);
         vm.stopPrank();
     }
 }

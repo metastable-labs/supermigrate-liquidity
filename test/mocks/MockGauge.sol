@@ -37,7 +37,7 @@ contract MockGauge is Context {
         require(_amount > 0, "ZeroAmount");
         require(isAlive, "NotAlive");
 
-        stakingToken.transferFrom(_recipient, address(this), _amount);
+        stakingToken.transferFrom(msg.sender, address(this), _amount);
         totalSupply += _amount;
         balanceOf[_recipient] += _amount;
     }
