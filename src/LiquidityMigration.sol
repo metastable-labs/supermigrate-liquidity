@@ -233,6 +233,7 @@ contract LiquidityMigration is OApp {
      * @param minGasLimit Minimum gas limit for bridging
      * @param _options LayerZero options
      * @param poolType Type of the liquidity pool
+     * @param stakeLPtokens If user wants to automatically stake Lp token on L2
      * @return receipt MessagingReceipt for the cross-chain message
      */
     function migrateERC20Liquidity(
@@ -247,7 +248,8 @@ contract LiquidityMigration is OApp {
         uint256 deadline,
         uint32 minGasLimit,
         bytes calldata _options,
-        PoolType poolType
+        PoolType poolType,
+        bool stakeLPtokens
     ) external payable returns (MessagingReceipt memory receipt) {
         require(tokenA != tokenB, "Identical addresses");
 
@@ -260,7 +262,7 @@ contract LiquidityMigration is OApp {
         _bridgeToken(tokenA, l2TokenA, amountA, minGasLimit, "Supermigrate Liquidity");
         _bridgeToken(tokenB, l2TokenB, amountB, minGasLimit, "Supermigrate Liquidity");
 
-        bytes memory payload = abi.encode(tokenA, tokenB, amountA, amountB, msg.sender, poolType);
+        bytes memory payload = abi.encode(tokenA, tokenB, amountA, amountB, msg.sender, poolType, stakeLPtokens);
         receipt = _lzSend(_dstEid, payload, _options, MessagingFee(msg.value, 0), payable(msg.sender));
 
         return receipt;
