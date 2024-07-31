@@ -156,18 +156,32 @@ interface StandardBridge {
     function OTHER_BRIDGE() external view returns (address);
 }
 
+/**
+ * @title LiquidityMigration
+ * @dev Facilitates the migration of liquidity from Uniswap V2 and V3 pools on Ethereum to Layer 2 solutions.
+ * This contract handles the removal of liquidity, bridging of assets, and cross-chain messaging.
+ */
 contract LiquidityMigration is OApp {
+    /// @notice Uniswap V2 Factory contract
     IUniswapV2Factory public immutable uniswapV2Factory;
+    /// @notice Uniswap V2 Router contract
     IUniswapV2Router02 public immutable uniswapV2Router;
+    /// @notice Uniswap V3 Factory contract
     IUniswapV3Factory public immutable uniswapV3Factory;
+    /// @notice Uniswap V3 NonFungiblePositionManager contract
     INonfungiblePositionManager public immutable nonfungiblePositionManager;
+    /// @notice L1 Standard Bridge contract for asset bridging
     StandardBridge public immutable l1StandardBridge;
 
+    /// @notice Address of the L2 Liquidity Manager contract
     address l2LiquidityManager;
 
+    /// @notice Emitted when liquidity is removed from a pool
     event LiquidityRemoved(address tokenA, address tokenB, uint256 amountA, uint256 amountB);
+    /// @notice Emitted when tokens are bridged to L2
     event TokensBridged(address token, uint256 amount);
 
+    /// @notice Enum representing different types of liquidity pools
     enum PoolType {
         NONE,
         STABLE,
@@ -175,6 +189,17 @@ contract LiquidityMigration is OApp {
         CONCENTRATED
     }
 
+    /**
+     * @dev Constructor to initialize the LiquidityMigration contract
+     * @param _endpoint LayerZero endpoint address
+     * @param _delegate Address of the contract owner/delegate
+     * @param _uniswapV2Factory Address of Uniswap V2 Factory
+     * @param _uniswapV2Router Address of Uniswap V2 Router
+     * @param _uniswapV3Factory Address of Uniswap V3 Factory
+     * @param _nonfungiblePositionManager Address of Uniswap V3 NonFungiblePositionManager
+     * @param _l1StandardBridge Address of L1 Standard Bridge
+     * @param _l2LiquidityManager Address of L2 Liquidity Manager
+     */
     constructor(
         address _endpoint,
         address _delegate,
@@ -193,6 +218,23 @@ contract LiquidityMigration is OApp {
         l2LiquidityManager = _l2LiquidityManager;
     }
 
+    /**
+     * @notice Migrates ERC20 liquidity from Uniswap V2 or V3 to L2
+     * @dev Removes liquidity, bridges tokens, and sends a cross-chain message
+     * @param _dstEid Destination chain ID
+     * @param tokenA Address of token A
+     * @param tokenB Address of token B
+     * @param l2TokenA Address of token A on L2
+     * @param l2TokenB Address of token B on L2
+     * @param liquidity Amount of liquidity to migrate
+     * @param amountAMin Minimum amount of token A to receive
+     * @param amountBMin Minimum amount of token B to receive
+     * @param deadline Deadline for the transaction
+     * @param minGasLimit Minimum gas limit for bridging
+     * @param _options LayerZero options
+     * @param poolType Type of the liquidity pool
+     * @return receipt MessagingReceipt for the cross-chain message
+     */
     function migrateERC20Liquidity(
         uint32 _dstEid,
         address tokenA,
@@ -224,6 +266,16 @@ contract LiquidityMigration is OApp {
         return receipt;
     }
 
+    /**
+     * @notice Quotes the fee for cross-chain messaging
+     * @param _dstEid Destination chain ID
+     * @param tokenA Address of token A
+     * @param tokenB Address of token B
+     * @param liquidity Amount of liquidity
+     * @param _options LayerZero options
+     * @param _payInLzToken Whether to pay in LZ token
+     * @return fee MessagingFee struct containing the fee details
+     */
     function quote(
         uint32 _dstEid,
         address tokenA,
@@ -236,6 +288,11 @@ contract LiquidityMigration is OApp {
         fee = _quote(_dstEid, payload, _options, _payInLzToken);
     }
 
+    /**
+     * @notice Handles the receipt of ERC721 tokens
+     * @dev Required for ERC721 safeTransferFrom
+     * @return bytes4 Function selector
+     */
     function onERC721Received(address operator, address from, uint256 tokenId, bytes calldata data)
         external
         returns (bytes4)
@@ -243,6 +300,12 @@ contract LiquidityMigration is OApp {
         return this.onERC721Received.selector;
     }
 
+    /**
+     * @notice Checks if a pool is a V3 pool
+     * @param tokenA Address of token A
+     * @param tokenB Address of token B
+     * @return bool True if it's a V3 pool, false otherwise
+     */
     function isV3Pool(address tokenA, address tokenB) public view returns (bool) {
         uint16[3] memory fees = [500, 3000, 10_000];
         for (uint256 i = 0; i < fees.length; i++) {
@@ -253,6 +316,17 @@ contract LiquidityMigration is OApp {
         return false;
     }
 
+    /**
+     * @dev Removes liquidity from a Uniswap V2 pool
+     * @param tokenA Address of token A in the pair
+     * @param tokenB Address of token B in the pair
+     * @param liquidity Amount of liquidity to remove
+     * @param amountAMin Minimum amount of token A to receive
+     * @param amountBMin Minimum amount of token B to receive
+     * @param deadline Deadline for the transaction
+     * @return amountA Amount of token A received
+     * @return amountB Amount of token B received
+     */
     function _removeV2Liquidity(
         address tokenA,
         address tokenB,
@@ -278,6 +352,17 @@ contract LiquidityMigration is OApp {
         return (amountA, amountB);
     }
 
+    /**
+     * @dev Removes liquidity from a Uniswap V3 pool
+     * @param tokenA Address of token A in the pair
+     * @param tokenB Address of token B in the pair
+     * @param tokenId ID of the NFT representing the liquidity position
+     * @param amountAMin Minimum amount of token A to receive
+     * @param amountBMin Minimum amount of token B to receive
+     * @param deadline Deadline for the transaction
+     * @return amountA Amount of token A received
+     * @return amountB Amount of token B received
+     */
     function _removeV3Liquidity(
         address tokenA,
         address tokenB,
@@ -324,6 +409,14 @@ contract LiquidityMigration is OApp {
         return token0 == tokenA ? (amount0, amount1) : (amount1, amount0);
     }
 
+    /**
+     * @dev Bridges tokens from L1 to L2
+     * @param localToken Address of the token on L1
+     * @param l2Token Address of the corresponding token on L2
+     * @param amount Amount of tokens to bridge
+     * @param minGasLimit Minimum gas limit for the bridging transaction
+     * @param extraData Additional data for the bridging process
+     */
     function _bridgeToken(
         address localToken,
         address l2Token,
@@ -341,6 +434,13 @@ contract LiquidityMigration is OApp {
         emit TokensBridged(l2Token, amount);
     }
 
+    // Internal functions (_removeV2Liquidity, _removeV3Liquidity, _bridgeToken) remain unchanged
+    // but should also be documented with NatSpec in the actual implementation
+
+    /**
+     * @dev Internal function to handle incoming LayerZero messages
+     * @notice This contract doesn't receive messages, so this function always reverts
+     */
     function _lzReceive(
         Origin calldata _origin,
         bytes32 _guid,
@@ -348,18 +448,29 @@ contract LiquidityMigration is OApp {
         address _executor,
         bytes calldata _extraData
     ) internal virtual override {
-        // This contract doesn't receive messages, so we can leave this empty or revert
         revert("CrossChainLiquidityMigration does not receive messages");
     }
 
+    /**
+     * @dev Internal function to check if the caller is authorized
+     * @return bool True if the caller is the owner, false otherwise
+     */
     function _authorized() internal view returns (bool) {
         return msg.sender == owner();
     }
 
+    /**
+     * @notice Sets the configuration for LayerZero messaging
+     * @dev Can only be called by the owner
+     * @param _version Version of the configuration
+     * @param _dstEid Destination chain ID
+     * @param _outboundConfirmations Number of confirmations required for outbound messages
+     * @param _inboundConfirmations Number of confirmations required for inbound messages
+     */
     function _setConfig(uint32 _version, uint32 _dstEid, uint256 _outboundConfirmations, uint256 _inboundConfirmations)
         external
         onlyOwner
     {
-        // _setConfig(_version, _dstEid, _outboundConfirmations, _inboundConfirmations);
+        // Implementation needed
     }
 }

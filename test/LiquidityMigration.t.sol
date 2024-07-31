@@ -86,12 +86,7 @@ contract LiquidityMigrationTest is Test {
         lpToken.approve(address(liquidityMigration), liquidity);
 
         l1StandardBridge.setExpectedCalls(
-            address(tokenA),
-            address(l2TokenA),
-            150 ether,
-            address(tokenB),
-            address(l2TokenB),
-            250 ether
+            address(tokenA), address(l2TokenA), 150 ether, address(tokenB), address(l2TokenB), 250 ether
         );
 
         liquidityMigration.migrateERC20Liquidity(
@@ -104,23 +99,15 @@ contract LiquidityMigrationTest is Test {
             amountAMin,
             amountBMin,
             deadline,
-            100000,
+            100_000,
             "", // options
             LiquidityMigration.PoolType.VOLATILE
         );
 
         vm.stopPrank();
 
-        assertEq(
-            l1StandardBridge.getBridgedAmount(address(tokenA)),
-            150 ether,
-            "Incorrect bridged amount for tokenA"
-        );
-        assertEq(
-            l1StandardBridge.getBridgedAmount(address(tokenB)),
-            250 ether,
-            "Incorrect bridged amount for tokenB"
-        );
+        assertEq(l1StandardBridge.getBridgedAmount(address(tokenA)), 150 ether, "Incorrect bridged amount for tokenA");
+        assertEq(l1StandardBridge.getBridgedAmount(address(tokenB)), 250 ether, "Incorrect bridged amount for tokenB");
     }
 
     function testMigrateERC20LiquidityV3() public {
@@ -150,10 +137,7 @@ contract LiquidityMigrationTest is Test {
 
         // Set up mock V3 factory and router
         uniswapV3Factory.createPool(address(tokenA), address(tokenB), 3000);
-        nonfungiblePositionManager.setDecreaseLiquidityReturn(
-            150 ether,
-            250 ether
-        );
+        nonfungiblePositionManager.setDecreaseLiquidityReturn(150 ether, 250 ether);
 
         bytes32 mockPeer = bytes32(uint256(uint160(address(0x123))));
         OAppCore(address(liquidityMigration)).setPeer(TEST_CHAIN_ID, mockPeer);
@@ -163,19 +147,11 @@ contract LiquidityMigrationTest is Test {
         // Approve tokens and NFT
         tokenA.approve(address(liquidityMigration), 1000 ether);
         tokenB.approve(address(liquidityMigration), 1000 ether);
-        nonfungiblePositionManager.approve(
-            address(liquidityMigration),
-            tokenId
-        );
+        nonfungiblePositionManager.approve(address(liquidityMigration), tokenId);
 
         // Mock bridge calls
         l1StandardBridge.setExpectedCalls(
-            address(tokenA),
-            address(l2TokenA),
-            150 ether,
-            address(tokenB),
-            address(l2TokenB),
-            250 ether
+            address(tokenA), address(l2TokenA), 150 ether, address(tokenB), address(l2TokenB), 250 ether
         );
 
         // Execute migration
@@ -189,7 +165,7 @@ contract LiquidityMigrationTest is Test {
             400 ether, // amountAMin (less than initialLiquidity / 2)
             600 ether, // amountBMin (less than initialLiquidity / 2)
             block.timestamp + 1 hours,
-            100000, // minGasLimit
+            100_000, // minGasLimit
             "", // options
             LiquidityMigration.PoolType.CONCENTRATED
         );
@@ -197,16 +173,8 @@ contract LiquidityMigrationTest is Test {
         vm.stopPrank();
 
         // Verify events and state changes
-        assertEq(
-            l1StandardBridge.getBridgedAmount(address(tokenA)),
-            150 ether,
-            "Incorrect bridged amount for tokenA"
-        );
-        assertEq(
-            l1StandardBridge.getBridgedAmount(address(tokenB)),
-            250 ether,
-            "Incorrect bridged amount for tokenB"
-        );
+        assertEq(l1StandardBridge.getBridgedAmount(address(tokenA)), 150 ether, "Incorrect bridged amount for tokenA");
+        assertEq(l1StandardBridge.getBridgedAmount(address(tokenB)), 250 ether, "Incorrect bridged amount for tokenB");
     }
 
     function testMigrateERC20LiquidityInsufficientLiquidity() public {
@@ -245,7 +213,7 @@ contract LiquidityMigrationTest is Test {
             amountAMin,
             amountBMin,
             deadline,
-            100000,
+            100_000,
             "", // options
             LiquidityMigration.PoolType.VOLATILE
         );

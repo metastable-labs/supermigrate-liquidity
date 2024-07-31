@@ -27,21 +27,14 @@ contract MockEndpoint {
         uint256 lzTokenFee;
     }
 
-    function send(MessagingParams calldata _params, address _refundAddress) 
-        external 
-        payable 
+    function send(MessagingParams calldata _params, address _refundAddress)
+        external
+        payable
         returns (MessagingReceipt memory receipt)
     {
         // Mock implementation
         // In a real scenario, this would handle the cross-chain messaging
         // For testing, returning a dummy receipt
-        return MessagingReceipt({
-            guid: bytes32(0),
-            nonce: 0,
-            fee: MessagingFee({
-                nativeFee: msg.value,
-                lzTokenFee: 0
-            })
-        });
+        return MessagingReceipt({guid: bytes32(0), nonce: 0, fee: MessagingFee({nativeFee: msg.value, lzTokenFee: 0})});
     }
 }

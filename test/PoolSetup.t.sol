@@ -17,6 +17,7 @@ contract MockEndpoint {
         delegate = _delegate;
     }
 }
+
 contract L2LiquidityManagerTest is Test {
     L2LiquidityManager public liquidityManager;
     address public owner;
@@ -30,25 +31,26 @@ contract L2LiquidityManagerTest is Test {
         mockFeeReceiver = address(0x2);
         endpoint = new MockEndpoint();
 
-        liquidityManager = new L2LiquidityManager(address(mockRouter), address(mockFeeReceiver), 100, address(endpoint), owner);
+        liquidityManager =
+            new L2LiquidityManager(address(mockRouter), address(mockFeeReceiver), 100, address(endpoint), owner);
     }
 
-function testSetPoolSuccess() public {
-    address tokenA = address(0x3);
-    address tokenB = address(0x4);
-    address pool = address(0x5);
-    address gauge = address(0x6);
+    function testSetPoolSuccess() public {
+        address tokenA = address(0x3);
+        address tokenB = address(0x4);
+        address pool = address(0x5);
+        address gauge = address(0x6);
 
-    vm.expectEmit(true, true, true, true);
-    emit L2LiquidityManager.PoolSet(tokenA, tokenB, pool, gauge);
+        vm.expectEmit(true, true, true, true);
+        emit L2LiquidityManager.PoolSet(tokenA, tokenB, pool, gauge);
 
-    liquidityManager.setPool(tokenA, tokenB, pool, gauge);
+        liquidityManager.setPool(tokenA, tokenB, pool, gauge);
 
-    // Verify the pool was set correctly
-    (address returnedPool, address returnedGauge) = liquidityManager.getPool(tokenA, tokenB);
-    assertEq(returnedPool, pool, "Pool address mismatch");
-    assertEq(returnedGauge, gauge, "Gauge address mismatch");
-}
+        // Verify the pool was set correctly
+        (address returnedPool, address returnedGauge) = liquidityManager.getPool(tokenA, tokenB);
+        assertEq(returnedPool, pool, "Pool address mismatch");
+        assertEq(returnedGauge, gauge, "Gauge address mismatch");
+    }
 
     function testSetPoolReverseOrder() public {
         address tokenA = address(0x3);

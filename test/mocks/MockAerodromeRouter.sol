@@ -17,13 +17,13 @@ contract MockAerodromeRouter {
         address tokenA,
         address tokenB,
         bool stable,
-        uint amountADesired,
-        uint amountBDesired,
-        uint amountAMin,
-        uint amountBMin,
+        uint256 amountADesired,
+        uint256 amountBDesired,
+        uint256 amountAMin,
+        uint256 amountBMin,
         address to,
-        uint deadline
-    ) external returns (uint amountA, uint amountB, uint liquidity) {
+        uint256 deadline
+    ) external returns (uint256 amountA, uint256 amountB, uint256 liquidity) {
         //return (amountADesired, amountBDesired, 100);
         // Transfer tokens from the caller to this contract
         IERC20(tokenA).transferFrom(tx.origin, to, amountADesired);
@@ -38,16 +38,12 @@ contract MockAerodromeRouter {
     function addLiquidityETH(
         address token,
         bool stable,
-        uint amountTokenDesired,
-        uint amountTokenMin,
-        uint amountETHMin,
+        uint256 amountTokenDesired,
+        uint256 amountTokenMin,
+        uint256 amountETHMin,
         address to,
-        uint deadline
-    )
-        external
-        payable
-        returns (uint amountToken, uint amountETH, uint liquidity)
-    {
+        uint256 deadline
+    ) external payable returns (uint256 amountToken, uint256 amountETH, uint256 liquidity) {
         // Mock implementation
         wethToken.deposit{value: msg.value}();
         IERC20(token).transferFrom(tx.origin, to, amountTokenDesired);
@@ -55,8 +51,6 @@ contract MockAerodromeRouter {
         // Transfer WETH to the caller (which would be the L2LiquidityManager contract)
         wethToken.transfer(msg.sender, msg.value);
         //return (amountTokenDesired, msg.value, 100);
-
-
 
         amountToken = amountTokenDesired;
         amountETH = msg.value;

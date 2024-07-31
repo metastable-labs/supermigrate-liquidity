@@ -11,7 +11,6 @@ import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-
 contract MockFeeRecipient {}
 
 contract MockEndpoint {
@@ -32,7 +31,7 @@ contract L2LiquidityManagerTest is Test {
     MockEndpoint public endpoint;
     address public user;
     address public owner;
-    
+
     function setUp() public {
         owner = address(this);
         weth = new MockWETH();
@@ -40,7 +39,8 @@ contract L2LiquidityManagerTest is Test {
         mockRouter = new MockAerodromeRouter(address(weth));
         owner = address(this);
         mockFeeRecipient = new MockFeeRecipient();
-        liquidityManager = new L2LiquidityManager(address(mockRouter), address(mockFeeRecipient), 100, address(endpoint), owner);
+        liquidityManager =
+            new L2LiquidityManager(address(mockRouter), address(mockFeeRecipient), 100, address(endpoint), owner);
         user = address(0x1);
 
         tokenA = new MockERC20("Token A", "TKNA");
@@ -51,19 +51,9 @@ contract L2LiquidityManagerTest is Test {
         tokenB.mint(address(this), 1000 ether);
 
         // Set up a pool for tokenA and tokenB
-        liquidityManager.setPool(
-            address(tokenA),
-            address(tokenB),
-            address(0x123),
-            address(0x456)
-        );
+        liquidityManager.setPool(address(tokenA), address(tokenB), address(0x123), address(0x456));
         // Set up a pool for tokenA and WETH
-        liquidityManager.setPool(
-            address(tokenA),
-            address(weth),
-            address(0x789),
-            address(0xabc)
-        );
+        liquidityManager.setPool(address(tokenA), address(weth), address(0x789), address(0xabc));
     }
 
     function testDepositLiquidityERC20() public {
@@ -110,16 +100,8 @@ contract L2LiquidityManagerTest is Test {
         );
 
         // Check if fees were transferred to the fee receiver
-        assertEq(
-            tokenA.balanceOf(liquidityManager.feeReceiver()),
-            1 ether,
-            "Incorrect tokenA fee"
-        );
-        assertEq(
-            tokenB.balanceOf(liquidityManager.feeReceiver()),
-            2 ether,
-            "Incorrect tokenB fee"
-        );
+        assertEq(tokenA.balanceOf(liquidityManager.feeReceiver()), 1 ether, "Incorrect tokenA fee");
+        assertEq(tokenB.balanceOf(liquidityManager.feeReceiver()), 2 ether, "Incorrect tokenB fee");
     }
 
     function testDepositLiquidityETH() public {
@@ -152,9 +134,7 @@ contract L2LiquidityManagerTest is Test {
         uint256 expectedAmountAfterFeeToken = 99 ether;
 
         assertEq(
-            liquidityManager.getUserLiquidity(user, address(weth)),
-            expectedAmountAfterFeeETH,
-            "Incorrect ETH liquidity"
+            liquidityManager.getUserLiquidity(user, address(weth)), expectedAmountAfterFeeETH, "Incorrect ETH liquidity"
         );
         assertEq(
             liquidityManager.getUserLiquidity(user, address(tokenA)),
@@ -162,31 +142,17 @@ contract L2LiquidityManagerTest is Test {
             "Incorrect tokenA liquidity"
         );
 
-        assertEq(
-            weth.balanceOf(address(liquidityManager.feeReceiver())),
-            0.01 ether,
-            "Incorrect ETH fee"
-        );
-        assertEq(
-            tokenA.balanceOf(liquidityManager.feeReceiver()),
-            1 ether,
-            "Incorrect tokenA fee"
-        );
+        assertEq(weth.balanceOf(address(liquidityManager.feeReceiver())), 0.01 ether, "Incorrect ETH fee");
+        assertEq(tokenA.balanceOf(liquidityManager.feeReceiver()), 1 ether, "Incorrect tokenA fee");
 
-        assertEq(
-            weth.balanceOf(address(liquidityManager)),
-            0.99 ether,
-            "WETH balance of L2LiquidityManager"
-        );
+        assertEq(weth.balanceOf(address(liquidityManager)), 0.99 ether, "WETH balance of L2LiquidityManager");
     }
 
     function testDepositLiquidityFeeCalculation() public {
         uint256 amountA = 100 ether;
         uint256 amountB = 200 ether;
-        uint256 expectedFeeA = (amountA * liquidityManager.migrationFee()) /
-            liquidityManager.FEE_DENOMINATOR();
-        uint256 expectedFeeB = (amountB * liquidityManager.migrationFee()) /
-            liquidityManager.FEE_DENOMINATOR();
+        uint256 expectedFeeA = (amountA * liquidityManager.migrationFee()) / liquidityManager.FEE_DENOMINATOR();
+        uint256 expectedFeeB = (amountB * liquidityManager.migrationFee()) / liquidityManager.FEE_DENOMINATOR();
 
         tokenA.mint(user, amountA);
         tokenB.mint(user, amountB);
@@ -200,27 +166,13 @@ contract L2LiquidityManagerTest is Test {
         tokenB.approve(address(mockRouter), amountB);
 
         liquidityManager._depositLiquidity(
-            address(tokenA),
-            address(tokenB),
-            amountA,
-            amountB,
-            amountA,
-            amountB,
-            L2LiquidityManager.PoolType.STABLE
+            address(tokenA), address(tokenB), amountA, amountB, amountA, amountB, L2LiquidityManager.PoolType.STABLE
         );
 
         vm.stopPrank();
 
-        assertEq(
-            tokenA.balanceOf(liquidityManager.feeReceiver()),
-            expectedFeeA,
-            "Incorrect tokenA fee"
-        );
-        assertEq(
-            tokenB.balanceOf(liquidityManager.feeReceiver()),
-            expectedFeeB,
-            "Incorrect tokenB fee"
-        );
+        assertEq(tokenA.balanceOf(liquidityManager.feeReceiver()), expectedFeeA, "Incorrect tokenA fee");
+        assertEq(tokenB.balanceOf(liquidityManager.feeReceiver()), expectedFeeB, "Incorrect tokenB fee");
     }
 
     function testChangeFeesAndVerify() public {
@@ -243,13 +195,7 @@ contract L2LiquidityManagerTest is Test {
         tokenB.approve(address(mockRouter), amountB);
 
         liquidityManager._depositLiquidity(
-            address(tokenA),
-            address(tokenB),
-            amountA,
-            amountB,
-            amountA,
-            amountB,
-            L2LiquidityManager.PoolType.STABLE
+            address(tokenA), address(tokenB), amountA, amountB, amountA, amountB, L2LiquidityManager.PoolType.STABLE
         );
 
         vm.stopPrank();
@@ -268,15 +214,7 @@ contract L2LiquidityManagerTest is Test {
             "Incorrect tokenB liquidity after wrong fee"
         );
 
-        assertEq(
-            tokenA.balanceOf(liquidityManager.feeReceiver()),
-            20 ether,
-            "Incorrect tokenA fee transfer"
-        );
-        assertEq(
-            tokenB.balanceOf(liquidityManager.feeReceiver()),
-            40 ether,
-            "Incorrect tokenB fee transfer"
-        );
+        assertEq(tokenA.balanceOf(liquidityManager.feeReceiver()), 20 ether, "Incorrect tokenA fee transfer");
+        assertEq(tokenB.balanceOf(liquidityManager.feeReceiver()), 40 ether, "Incorrect tokenB fee transfer");
     }
 }
