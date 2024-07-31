@@ -35,14 +35,30 @@ contract L2LiquidityManager is OApp {
     mapping(uint32 => bytes32) public trustedRemoteLookup;
 
     event LiquidityDeposited(
-        address user, address token0, address token1, uint256 amount0, uint256 amount1, uint256 lpTokens
+        address user,
+        address token0,
+        address token1,
+        uint256 amount0,
+        uint256 amount1,
+        uint256 lpTokens
     );
     event LPTokensStaked(address user, address pool, uint256 amount);
     event PoolSet(address tokenA, address tokenB, address pool, address gauge);
-    event LPTokensStaked(address user, address pool, address gauge, uint256 amount);
-    event LPTokensWithdrawn(uint256 amount);
+    event LPTokensStaked(
+        address user,
+        address pool,
+        address gauge,
+        uint256 amount
+    );
+    event LPTokensWithdrawn(address user, address pool, uint256 amount);
     event AeroEmissionsClaimed(address user, address pool, address gauge);
-    event CrossChainLiquidityReceived(address user, address tokenA, address tokenB, uint256 amountA, uint256 amountB);
+    event CrossChainLiquidityReceived(
+        address user,
+        address tokenA,
+        address tokenB,
+        uint256 amountA,
+        uint256 amountB
+    );
     event TrustedRemoteSet(uint32 indexed srcEid, bytes srcAddress);
 
     enum PoolType {
@@ -65,8 +81,19 @@ contract L2LiquidityManager is OApp {
     }
     // add a new pool to supermigrate
 
-    function setPool(address tokenA, address tokenB, address pool, address gauge) external onlyOwner {
-        require(tokenA != address(0) && tokenB != address(0) && pool != address(0), "Invalid addresses");
+    function setPool(
+        address tokenA,
+        address tokenB,
+        address pool,
+        address gauge
+    ) external onlyOwner {
+        require(
+            tokenA != address(0) &&
+                tokenB != address(0) &&
+                tokenA != tokenB &&
+                pool != address(0),
+            "Invalid addresses"
+        );
         PoolData memory poolData = PoolData(pool, gauge);
         tokenPairToPools[tokenA][tokenB] = poolData;
         tokenPairToPools[tokenB][tokenA] = poolData;
@@ -80,7 +107,15 @@ contract L2LiquidityManager is OApp {
         emit PoolSet(tokenA, tokenB, pool, gauge);
     }
 
-    function getPool(address tokenA, address tokenB) external view returns (address pool, address gauge) {
+    function setFee(uint256 _newFee) external onlyOwner {
+        require(_newFee <= FEE_DENOMINATOR, "Fee too high");
+        migrationFee = _newFee;
+    }
+
+    function getPool(
+        address tokenA,
+        address tokenB
+    ) external view returns (address pool, address gauge) {
         PoolData memory poolData = tokenPairToPools[tokenA][tokenB];
         return (poolData.poolAddress, poolData.gaugeAddress);
     }
@@ -99,11 +134,10 @@ contract L2LiquidityManager is OApp {
      * Then make one or more calls to getPools(start, end) to retrieve all pools in batches.
      * end
      */
-    function getPools(uint256 start, uint256 end)
-        external
-        view
-        returns (address[] memory pools, address[] memory gauges)
-    {
+    function getPools(
+        uint256 start,
+        uint256 end
+    ) external view returns (address[] memory pools, address[] memory gauges) {
         require(start < end, "Invalid range");
         require(end <= allPools.length, "End out of bounds");
 
@@ -119,12 +153,32 @@ contract L2LiquidityManager is OApp {
         return (pools, gauges);
     }
 
-    function getUserLiquidity(address user, address token) external view returns (uint256) {
+    function getUserLiquidity(
+        address user,
+        address token
+    ) external view returns (uint256) {
         return userLiquidity[user][token];
     }
 
-    function getUserStakedLP(address user, address pool) external view returns (uint256) {
+    function getUserStakedLP(
+        address user,
+        address pool
+    ) external view returns (uint256) {
         return userStakedLPTokens[user][pool];
+    }
+
+    function deductFee(
+        address token,
+        uint256 amount
+    ) private returns (uint256) {
+        uint256 feeAmount = (amount * migrationFee) / FEE_DENOMINATOR;
+        if (token == address(aerodromeRouter.weth())) {
+            aerodromeRouter.weth().deposit{value: feeAmount}();
+            IERC20(aerodromeRouter.weth()).transfer(feeReceiver, feeAmount);
+        } else {
+            IERC20(token).transferFrom(_msgSender(), feeReceiver, feeAmount);
+        }
+        return amount - feeAmount;
     }
 
     function _depositLiquidity(
@@ -135,7 +189,7 @@ contract L2LiquidityManager is OApp {
         uint256 amountAMin,
         uint256 amountBMin,
         PoolType poolType
-    ) internal {
+    ) public payable {
         PoolData memory poolData = tokenPairToPools[tokenA][tokenB];
         require(poolData.poolAddress != address(0), "Pool does not exist");
 
@@ -154,10 +208,21 @@ contract L2LiquidityManager is OApp {
             );
         } else {
             require(msg.value == 0, "ETH sent with token-token deposit");
-            _depositLiquidityERC20(tokenA, tokenB, amountA, amountB, amountAMin, amountBMin, poolType);
+            _depositLiquidityERC20(
+                tokenA,
+                tokenB,
+                amountA,
+                amountB,
+                amountAMin,
+                amountBMin,
+                poolType
+            );
         }
     }
 
+    /**
+     * Assuming that amountTokenMin is calculated after deducting migration fees in the front end.
+     */
     function _depositLiquidityETH(
         address token,
         uint256 amountToken,
@@ -168,28 +233,64 @@ contract L2LiquidityManager is OApp {
         IERC20(token).approve(address(aerodromeRouter), amountToken);
         bool stable = (poolType == PoolType.STABLE);
 
-        // calculate minimum amount with 0.1% slippage
-        uint256 updatedAmountTokenMin = mulDiv(amountTokenMin, FEE_DENOMINATOR - LIQ_SLIPPAGE, FEE_DENOMINATOR);
-        uint256 updatedAmountEthMin = mulDiv(amountETHMin, FEE_DENOMINATOR - LIQ_SLIPPAGE, FEE_DENOMINATOR);
+        amountToken = deductFee(token, amountToken);
+        uint256 ethAmount = deductFee(
+            address(aerodromeRouter.weth()),
+            msg.value
+        );
 
-        (uint256 amountTokenOut, uint256 amountETHOut, uint256 liquidity) = aerodromeRouter.addLiquidityETH{
-            value: msg.value
-        }(token, stable, amountToken, updatedAmountTokenMin, updatedAmountEthMin, address(this), block.timestamp);
+        // calculate minimum amount with 0.1% slippage
+        uint256 updatedAmountTokenMin = mulDiv(
+            amountTokenMin,
+            FEE_DENOMINATOR - LIQ_SLIPPAGE,
+            FEE_DENOMINATOR
+        );
+        uint256 updatedAmountEthMin = mulDiv(
+            amountETHMin,
+            FEE_DENOMINATOR - LIQ_SLIPPAGE,
+            FEE_DENOMINATOR
+        );
+
+        (
+            uint256 amountTokenOut,
+            uint256 amountETHOut,
+            uint256 liquidity
+        ) = aerodromeRouter.addLiquidityETH{value: ethAmount}(
+                token,
+                stable,
+                amountToken,
+                updatedAmountTokenMin,
+                updatedAmountEthMin,
+                address(this),
+                block.timestamp
+            );
         // Update user liquidity
         userLiquidity[msg.sender][token] += amountTokenOut;
-        userLiquidity[msg.sender][address(aerodromeRouter.weth())] += amountETHOut;
+        userLiquidity[msg.sender][
+            address(aerodromeRouter.weth())
+        ] += amountETHOut;
 
         // Refund excess ETH if any
-        if (msg.value > amountETHOut) {
-            (bool success,) = msg.sender.call{value: msg.value - amountETHOut}("");
+        if (ethAmount > amountETHOut) {
+            (bool success, ) = msg.sender.call{value: ethAmount - amountETHOut}(
+                ""
+            );
             require(success, "ETH transfer failed");
         }
 
         emit LiquidityDeposited(
-            msg.sender, address(aerodromeRouter.weth()), token, amountETHOut, amountTokenOut, liquidity
+            msg.sender,
+            address(aerodromeRouter.weth()),
+            token,
+            amountETHOut,
+            amountTokenOut,
+            liquidity
         );
     }
 
+    /**
+     * Assuming that amountAMin and amountBMin are calculated after deducting the migration fees in the front end.
+     */
     function _depositLiquidityERC20(
         address tokenA,
         address tokenB,
@@ -203,26 +304,48 @@ contract L2LiquidityManager is OApp {
         IERC20(tokenB).approve(address(aerodromeRouter), amountB);
         bool stable = (poolType == PoolType.STABLE);
 
-        // calculate minimum amount with 0.1% slippage
-        uint256 updatedAmountAMin = mulDiv(amountAMin, FEE_DENOMINATOR - LIQ_SLIPPAGE, FEE_DENOMINATOR);
-        uint256 updatedAmountBMin = mulDiv(amountBMin, FEE_DENOMINATOR - LIQ_SLIPPAGE, FEE_DENOMINATOR);
+        amountA = deductFee(tokenA, amountA);
+        amountB = deductFee(tokenB, amountB);
 
-        (uint256 amountAOut, uint256 amountBOut, uint256 liquidity) = aerodromeRouter.addLiquidity(
-            tokenA,
-            tokenB,
-            stable,
-            amountA,
-            amountB,
-            updatedAmountAMin,
-            updatedAmountBMin,
-            address(this),
-            block.timestamp
+        // calculate minimum amount with 0.1% slippage
+        uint256 updatedAmountAMin = mulDiv(
+            amountAMin,
+            FEE_DENOMINATOR - LIQ_SLIPPAGE,
+            FEE_DENOMINATOR
         );
+        uint256 updatedAmountBMin = mulDiv(
+            amountBMin,
+            FEE_DENOMINATOR - LIQ_SLIPPAGE,
+            FEE_DENOMINATOR
+        );
+
+        (
+            uint256 amountAOut,
+            uint256 amountBOut,
+            uint256 liquidity
+        ) = aerodromeRouter.addLiquidity(
+                tokenA,
+                tokenB,
+                stable,
+                amountA,
+                amountB,
+                updatedAmountAMin,
+                updatedAmountBMin,
+                address(this),
+                block.timestamp
+            );
 
         // Update user liquidity
         userLiquidity[msg.sender][tokenA] += amountAOut;
         userLiquidity[msg.sender][tokenB] += amountBOut;
-        emit LiquidityDeposited(msg.sender, tokenA, tokenB, amountAOut, amountBOut, liquidity);
+        emit LiquidityDeposited(
+            msg.sender,
+            tokenA,
+            tokenB,
+            amountAOut,
+            amountBOut,
+            liquidity
+        );
     }
 
     function _lzReceive(
@@ -233,42 +356,111 @@ contract L2LiquidityManager is OApp {
         bytes calldata _extraData
     ) internal override {
         // Ensure the message is from the trusted remote on the source chain
-        require(_checkTrustedRemote(_origin), "L2LiquidityManager: Invalid remote sender");
-        (address tokenA, address tokenB, uint256 amountA, uint256 amountB, address user, PoolType poolType) =
-            abi.decode(_message, (address, address, uint256, uint256, address, PoolType));
+        require(
+            _checkTrustedRemote(_origin),
+            "L2LiquidityManager: Invalid remote sender"
+        );
+        (
+            address tokenA,
+            address tokenB,
+            uint256 amountA,
+            uint256 amountB,
+            address user,
+            PoolType poolType
+        ) = abi.decode(
+                _message,
+                (address, address, uint256, uint256, address, PoolType)
+            );
 
-        emit CrossChainLiquidityReceived(user, tokenA, tokenB, amountA, amountB);
+        emit CrossChainLiquidityReceived(
+            user,
+            tokenA,
+            tokenB,
+            amountA,
+            amountB
+        );
 
-        _depositLiquidity(tokenA, tokenB, amountA, amountB, amountA, amountB, poolType);
+        _depositLiquidity(
+            tokenA,
+            tokenB,
+            amountA,
+            amountB,
+            amountA,
+            amountB,
+            poolType
+        );
     }
 
-    function stakeLPToken(uint256 amount, address owner, address tokenA, address tokenB) external {
+    function stakeLPToken(
+        uint256 amount,
+        address owner,
+        address tokenA,
+        address tokenB
+    ) external {
         PoolData memory poolData = tokenPairToPools[tokenA][tokenB];
+        require(poolData.poolAddress != address(0), "Pool does not exist");
+
+        IERC20(poolData.poolAddress).transferFrom(
+            msg.sender,
+            address(this),
+            amount
+        );
 
         IERC20(poolData.poolAddress).approve(poolData.gaugeAddress, amount);
         IGauge(poolData.gaugeAddress).deposit(amount, owner);
-        emit LPTokensStaked(owner, poolData.poolAddress, poolData.gaugeAddress, amount);
+        userStakedLPTokens[msg.sender][poolData.poolAddress] += amount;
+        emit LPTokensStaked(
+            owner,
+            poolData.poolAddress,
+            poolData.gaugeAddress,
+            amount
+        );
     }
 
-    function unstakeLPToken(uint256 amount, address tokenA, address tokenB) external {
+    function unstakeLPToken(
+        uint256 amount,
+        address tokenA,
+        address tokenB
+    ) external {
         PoolData memory poolData = tokenPairToPools[tokenA][tokenB];
+        require(poolData.poolAddress != address(0), "Pool does not exist");
+
+        require(
+            userStakedLPTokens[msg.sender][poolData.poolAddress] >= amount,
+            "Insufficient staked LP tokens"
+        );
 
         IGauge(poolData.gaugeAddress).withdraw(amount);
-        emit LPTokensWithdrawn(amount);
+        userStakedLPTokens[msg.sender][poolData.poolAddress] -= amount;
+
+        emit LPTokensWithdrawn(msg.sender, poolData.poolAddress, amount);
     }
 
-    function claimAeroRewards(address owner, address tokenA, address tokenB) external {
+    function claimAeroRewards(
+        address owner,
+        address tokenA,
+        address tokenB
+    ) external {
         PoolData memory poolData = tokenPairToPools[tokenA][tokenB];
 
         IGauge(poolData.gaugeAddress).getReward(owner);
-        emit AeroEmissionsClaimed(owner, poolData.poolAddress, poolData.gaugeAddress);
+        emit AeroEmissionsClaimed(
+            owner,
+            poolData.poolAddress,
+            poolData.gaugeAddress
+        );
     }
 
-    function _checkTrustedRemote(Origin calldata _origin) internal view returns (bool) {
+    function _checkTrustedRemote(
+        Origin calldata _origin
+    ) internal view returns (bool) {
         return trustedRemoteLookup[_origin.srcEid] == _origin.sender;
     }
 
-    function setTrustedRemote(uint32 _srcEid, bytes calldata _srcAddress) external onlyOwner {
+    function setTrustedRemote(
+        uint32 _srcEid,
+        bytes calldata _srcAddress
+    ) external onlyOwner {
         trustedRemoteLookup[_srcEid] = bytes32(bytes20(_srcAddress));
         emit TrustedRemoteSet(_srcEid, _srcAddress);
     }
@@ -276,7 +468,11 @@ contract L2LiquidityManager is OApp {
     receive() external payable {}
 
     // Helper function for safe multiplication and division
-    function mulDiv(uint256 x, uint256 y, uint256 denominator) internal pure returns (uint256 result) {
+    function mulDiv(
+        uint256 x,
+        uint256 y,
+        uint256 denominator
+    ) internal pure returns (uint256 result) {
         uint256 prod0;
         uint256 prod1;
         assembly {
