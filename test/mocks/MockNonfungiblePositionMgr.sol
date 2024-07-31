@@ -4,7 +4,7 @@ pragma solidity ^0.8.20;
 import "./MockERC20.sol";
 import "forge-std/console.sol";
 
-interface INonfungiblePositionManager {
+interface IMockNonfungiblePositionManager {
     struct DecreaseLiquidityParams {
         uint256 tokenId;
         uint128 liquidity;
@@ -73,7 +73,7 @@ contract MockNonfungiblePositionManager {
         return (0, address(0), pos.token0, pos.token1, pos.fee, pos.tickLower, pos.tickUpper, pos.liquidity, 0, 0, 0, 0);
     }
 
-    function decreaseLiquidity(INonfungiblePositionManager.DecreaseLiquidityParams calldata params)
+    function decreaseLiquidity(IMockNonfungiblePositionManager.DecreaseLiquidityParams calldata params)
         external
         payable
         returns (uint256 amount0, uint256 amount1)
@@ -88,7 +88,7 @@ contract MockNonfungiblePositionManager {
         return (amount0, amount1);
     }
 
-    function collect(INonfungiblePositionManager.CollectParams calldata params)
+    function collect(IMockNonfungiblePositionManager.CollectParams calldata params)
         external
         payable
         returns (uint256 amount0, uint256 amount1)
