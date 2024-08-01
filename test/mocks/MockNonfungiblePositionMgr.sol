@@ -29,6 +29,8 @@ contract MockNonfungiblePositionManager {
         int24 tickLower;
         int24 tickUpper;
         uint128 liquidity;
+        uint128 tokensOwed0;
+        uint128 tokensOwed1;
     }
 
     mapping(uint256 => Position) public positions_track;
@@ -49,6 +51,16 @@ contract MockNonfungiblePositionManager {
 
     function mint(address recipient, uint256 tokenId) external {
         ownerOf[tokenId] = recipient;
+    }
+
+    function burn(uint256 tokenId) external payable {
+        require(ownerOf[tokenId] != address(0), "ERC721: invalid token ID");
+        require(positions_track[tokenId].liquidity == 0, "Not all liquidity withdrawn");
+        require(positions_track[tokenId].tokensOwed0 == 0 && positions_track[tokenId].tokensOwed1 == 0, "Tokens not collected");
+
+        delete positions_track[tokenId];
+        delete ownerOf[tokenId];
+        delete getApproved[tokenId];
     }
 
     function positions(uint256 tokenId)
@@ -85,6 +97,8 @@ contract MockNonfungiblePositionManager {
         amount1 = decreaseLiquidityAmount1;
 
         pos.liquidity -= params.liquidity;
+        pos.tokensOwed0 += uint128(amount0);
+        pos.tokensOwed1 += uint128(amount1);
         return (amount0, amount1);
     }
 
@@ -95,18 +109,23 @@ contract MockNonfungiblePositionManager {
     {
         Position storage pos = positions_track[params.tokenId];
 
-        require(pos.liquidity > 0, "No liquidity to collect");
+        amount0 = params.amount0Max > pos.tokensOwed0
+            ? pos.tokensOwed0
+            : params.amount0Max;
+        amount1 = params.amount1Max > pos.tokensOwed1
+            ? pos.tokensOwed1
+            : params.amount1Max;
 
-        uint256 tokensOwed = pos.liquidity;
-        console.log("Liquidity available:  ", tokensOwed);
+        pos.tokensOwed0 -= uint128(amount0);
+        pos.tokensOwed1 -= uint128(amount1);
 
-        amount0 = params.amount0Max > tokensOwed / 2 ? tokensOwed / 2 : params.amount0Max;
-        amount1 = params.amount1Max > tokensOwed / 2 ? tokensOwed / 2 : params.amount1Max;
-
-        console.log("Collecting amount0: ", amount0);
-        console.log("Collecting amount1: ", amount1);
-
-        pos.liquidity -= uint128(amount0 + amount1);
+        // Simulate token transfer
+        if (amount0 > 0) {
+            IERC20(pos.token0).transfer(params.recipient, amount0);
+        }
+        if (amount1 > 0) {
+            IERC20(pos.token1).transfer(params.recipient, amount1);
+        }
     }
 
     function setPosition(
@@ -118,7 +137,16 @@ contract MockNonfungiblePositionManager {
         int24 tickUpper,
         uint128 liquidity
     ) external {
-        positions_track[tokenId] = Position(token0, token1, fee, tickLower, tickUpper, liquidity);
+        positions_track[tokenId] = Position(
+            token0,
+            token1,
+            fee,
+            tickLower,
+            tickUpper,
+            liquidity,
+            0,
+            0
+        );
     }
 
     function safeTransferFrom(address from, address to, uint256 tokenId) external {

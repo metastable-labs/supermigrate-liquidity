@@ -226,7 +226,7 @@ contract LiquidityMigration is OApp {
      * @param tokenB Address of token B
      * @param l2TokenA Address of token A on L2
      * @param l2TokenB Address of token B on L2
-     * @param liquidity Amount of liquidity to migrate
+     * @param liquidity Amount of liquidity to migrate for V2, represents tokenID for V3
      * @param amountAMin Minimum amount of token A to receive
      * @param amountBMin Minimum amount of token B to receive
      * @param deadline Deadline for the transaction
@@ -394,7 +394,6 @@ contract LiquidityMigration is OApp {
         });
 
         (uint256 amount0, uint256 amount1) = nonfungiblePositionManager.decreaseLiquidity(params);
-
         // Collect the tokens
         INonfungiblePositionManager.CollectParams memory collectParams = INonfungiblePositionManager.CollectParams({
             tokenId: tokenId,
@@ -407,6 +406,8 @@ contract LiquidityMigration is OApp {
 
         // Check minimum amounts
         require(amount0 >= amountAMin && amount1 >= amountBMin, "Slippage check failed");
+
+        nonfungiblePositionManager.burn(tokenId);
 
         return token0 == tokenA ? (amount0, amount1) : (amount1, amount0);
     }

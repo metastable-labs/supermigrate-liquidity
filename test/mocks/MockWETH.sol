@@ -15,7 +15,7 @@ contract MockWETH is ERC20, IWETH {
     constructor() ERC20("Wrapped Ether", "WETH") {}
 
     function deposit() external payable override {
-        require(msg.value > 0);
+        require(msg.value > 0, "No ETH sent");
         _mint(msg.sender, msg.value);
     }
 

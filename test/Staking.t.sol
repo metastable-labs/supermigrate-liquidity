@@ -59,8 +59,9 @@ contract L2LiquidityManagerTest is Test {
 
         lpToken.mint(user, amount);
 
-        vm.startPrank(user);
-        lpToken.approve(address(liquidityManager), amount);
+        vm.startPrank(user, user);
+        (, address gaugeAddress) = liquidityManager.getPool(tokenA, tokenB);
+        lpToken.approve(gaugeAddress, amount);
 
         (address pool,) = liquidityManager.getPool(tokenA, tokenB);
 
@@ -135,7 +136,8 @@ contract L2LiquidityManagerTest is Test {
         lpToken.mint(user, amount);
 
         vm.startPrank(user, user);
-        lpToken.approve(address(liquidityManager), amount);
+        (, address gaugeAddress) = liquidityManager.getPool(tokenA, tokenB);
+        lpToken.approve(gaugeAddress, amount);
         liquidityManager.stakeLPToken(amount, user, tokenA, tokenB);
 
         liquidityManager.unstakeLPToken(amount, tokenA, tokenB);
@@ -151,8 +153,9 @@ contract L2LiquidityManagerTest is Test {
         address tokenB = address(0x5);
         lpToken.mint(user, amount);
 
-        vm.startPrank(user);
-        lpToken.approve(address(liquidityManager), amount);
+        vm.startPrank(user, user);
+        (, address gaugeAddress) = liquidityManager.getPool(tokenA, tokenB);
+        lpToken.approve(gaugeAddress, amount);
         liquidityManager.stakeLPToken(amount, user, tokenA, tokenB);
 
         vm.expectRevert("Insufficient staked LP tokens");
@@ -168,8 +171,9 @@ contract L2LiquidityManagerTest is Test {
         lpToken.mint(user, amount);
         rewardToken.mint(address(gauge), rewardAmount);
 
-        vm.startPrank(user);
-        lpToken.approve(address(liquidityManager), amount);
+        vm.startPrank(user, user);
+        (, address gaugeAddress) = liquidityManager.getPool(tokenA, tokenB);
+        lpToken.approve(gaugeAddress, amount);
         liquidityManager.stakeLPToken(amount, user, tokenA, tokenB);
 
         gauge.setReward(user, rewardAmount);
@@ -186,8 +190,9 @@ contract L2LiquidityManagerTest is Test {
         address tokenB = address(0x5);
         lpToken.mint(user, amount);
 
-        vm.startPrank(user);
-        lpToken.approve(address(liquidityManager), amount);
+        vm.startPrank(user, user);
+        (, address gaugeAddress) = liquidityManager.getPool(tokenA, tokenB);
+        lpToken.approve(gaugeAddress, amount);
         liquidityManager.stakeLPToken(amount, user, tokenA, tokenB);
 
         liquidityManager.claimAeroRewards(user, tokenA, tokenB);
@@ -202,9 +207,9 @@ contract L2LiquidityManagerTest is Test {
         address tokenB = address(0x5);
         lpToken.mint(user, amount);
 
-        vm.startPrank(user);
-        lpToken.approve(address(liquidityManager), amount);
-        lpToken.approve(address(liquidityManager), amount);
+        vm.startPrank(user, user);
+        (, address gaugeAddress) = liquidityManager.getPool(tokenA, tokenB);
+        lpToken.approve(gaugeAddress, amount);
 
         vm.expectEmit(true, true, true, true);
         emit L2LiquidityManager.LPTokensStaked(user, address(lpToken), address(gauge), amount);
