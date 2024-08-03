@@ -7,6 +7,7 @@
 ## LiquidityMigration.sol (Deployed on Ethereum)
 This contract is the central hub for managing the migration of liquidity from Layer 1 to Layer 2.
 - Initiates the process of withdrawing liquidity from Uniswap on L1
+    - Should check if the pool is a V2 or V3 pool
 - Interacts with the bridge contract to transfer assets to L2
 - Coordinates with LayerZero for cross-chain messaging
     - Triggers `L2LiqudiityManager.sol` for liquidity deployment on L2 (Aerodrome) once assets are bridged
