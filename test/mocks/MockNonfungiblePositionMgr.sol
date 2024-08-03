@@ -56,7 +56,10 @@ contract MockNonfungiblePositionManager {
     function burn(uint256 tokenId) external payable {
         require(ownerOf[tokenId] != address(0), "ERC721: invalid token ID");
         require(positions_track[tokenId].liquidity == 0, "Not all liquidity withdrawn");
-        require(positions_track[tokenId].tokensOwed0 == 0 && positions_track[tokenId].tokensOwed1 == 0, "Tokens not collected");
+        require(
+            positions_track[tokenId].tokensOwed0 == 0 && positions_track[tokenId].tokensOwed1 == 0,
+            "Tokens not collected"
+        );
 
         delete positions_track[tokenId];
         delete ownerOf[tokenId];
@@ -109,12 +112,8 @@ contract MockNonfungiblePositionManager {
     {
         Position storage pos = positions_track[params.tokenId];
 
-        amount0 = params.amount0Max > pos.tokensOwed0
-            ? pos.tokensOwed0
-            : params.amount0Max;
-        amount1 = params.amount1Max > pos.tokensOwed1
-            ? pos.tokensOwed1
-            : params.amount1Max;
+        amount0 = params.amount0Max > pos.tokensOwed0 ? pos.tokensOwed0 : params.amount0Max;
+        amount1 = params.amount1Max > pos.tokensOwed1 ? pos.tokensOwed1 : params.amount1Max;
 
         pos.tokensOwed0 -= uint128(amount0);
         pos.tokensOwed1 -= uint128(amount1);
@@ -137,16 +136,7 @@ contract MockNonfungiblePositionManager {
         int24 tickUpper,
         uint128 liquidity
     ) external {
-        positions_track[tokenId] = Position(
-            token0,
-            token1,
-            fee,
-            tickLower,
-            tickUpper,
-            liquidity,
-            0,
-            0
-        );
+        positions_track[tokenId] = Position(token0, token1, fee, tickLower, tickUpper, liquidity, 0, 0);
     }
 
     function safeTransferFrom(address from, address to, uint256 tokenId) external {

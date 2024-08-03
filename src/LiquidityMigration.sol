@@ -189,6 +189,22 @@ contract LiquidityMigration is OApp {
         CONCENTRATED
     }
 
+    // New struct to hold migration parameters
+    struct MigrationParams {
+        uint32 dstEid;
+        address tokenA;
+        address tokenB;
+        address l2TokenA;
+        address l2TokenB;
+        uint256 liquidity;
+        uint256 amountAMin;
+        uint256 amountBMin;
+        uint256 deadline;
+        uint32 minGasLimit;
+        PoolType poolType;
+        bool stakeLPtokens;
+    }
+
     /**
      * @dev Constructor to initialize the LiquidityMigration contract
      * @param _endpoint LayerZero endpoint address
@@ -221,53 +237,60 @@ contract LiquidityMigration is OApp {
     /**
      * @notice Migrates ERC20 liquidity from Uniswap V2 or V3 to L2
      * @dev Removes liquidity, bridges tokens, and sends a cross-chain message
-     * @param _dstEid Destination chain ID
-     * @param tokenA Address of token A
-     * @param tokenB Address of token B
-     * @param l2TokenA Address of token A on L2
-     * @param l2TokenB Address of token B on L2
-     * @param liquidity Amount of liquidity to migrate for V2, represents tokenID for V3
-     * @param amountAMin Minimum amount of token A to receive
-     * @param amountBMin Minimum amount of token B to receive
-     * @param deadline Deadline for the transaction
-     * @param minGasLimit Minimum gas limit for bridging
+     * @param params MigrationParams struct containing all necessary parameters
      * @param _options LayerZero options
-     * @param poolType Type of the liquidity pool
-     * @param stakeLPtokens If user wants to automatically stake Lp token on L2
      * @return receipt MessagingReceipt for the cross-chain message
      */
-    function migrateERC20Liquidity(
-        uint32 _dstEid,
-        address tokenA,
-        address tokenB,
-        address l2TokenA,
-        address l2TokenB,
-        uint256 liquidity,
-        uint256 amountAMin,
-        uint256 amountBMin,
-        uint256 deadline,
-        uint32 minGasLimit,
-        bytes calldata _options,
-        PoolType poolType,
-        bool stakeLPtokens
-    ) external payable returns (MessagingReceipt memory receipt) {
-        require(tokenA != tokenB, "Identical addresses");
+    function migrateERC20Liquidity(MigrationParams calldata params, bytes calldata _options)
+        external
+        payable
+        returns (MessagingReceipt memory receipt)
+    {
+        require(params.tokenA != params.tokenB, "Identical addresses");
 
-        (uint256 amountA, uint256 amountB) = isV3Pool(tokenA, tokenB)
-            ? _removeV3Liquidity(tokenA, tokenB, liquidity, amountAMin, amountBMin, deadline)
-            : _removeV2Liquidity(tokenA, tokenB, liquidity, amountAMin, amountBMin, deadline);
+        (uint256 amountA, uint256 amountB) = _removeLiquidity(params);
 
-        emit LiquidityRemoved(tokenA, tokenB, amountA, amountB);
+        emit LiquidityRemoved(params.tokenA, params.tokenB, amountA, amountB);
 
-        _bridgeToken(tokenA, l2TokenA, amountA, minGasLimit, "Supermigrate Liquidity");
-        _bridgeToken(tokenB, l2TokenB, amountB, minGasLimit, "Supermigrate Liquidity");
+        _bridgeTokens(params, amountA, amountB);
 
-        bytes memory payload = abi.encode(tokenA, tokenB, amountA, amountB, msg.sender, poolType, stakeLPtokens);
-        receipt = _lzSend(_dstEid, payload, _options, MessagingFee(msg.value, 0), payable(msg.sender));
+        bytes memory payload = abi.encode(
+            params.tokenA, params.tokenB, amountA, amountB, msg.sender, params.poolType, params.stakeLPtokens
+        );
+
+        receipt = _lzSend(params.dstEid, payload, _options, MessagingFee(msg.value, 0), payable(msg.sender));
 
         return receipt;
     }
 
+    /**
+     * @dev Internal function to remove liquidity from either V2 or V3 pool
+     * @param params MigrationParams struct containing necessary parameters
+     * @return amountA Amount of token A received
+     * @return amountB Amount of token B received
+     */
+    function _removeLiquidity(MigrationParams memory params) internal returns (uint256 amountA, uint256 amountB) {
+        if (isV3Pool(params.tokenA, params.tokenB)) {
+            return _removeV3Liquidity(
+                params.tokenA, params.tokenB, params.liquidity, params.amountAMin, params.amountBMin, params.deadline
+            );
+        } else {
+            return _removeV2Liquidity(
+                params.tokenA, params.tokenB, params.liquidity, params.amountAMin, params.amountBMin, params.deadline
+            );
+        }
+    }
+
+    /**
+     * @dev Internal function to bridge tokens to L2
+     * @param params MigrationParams struct containing necessary parameters
+     * @param amountA Amount of token A to bridge
+     * @param amountB Amount of token B to bridge
+     */
+    function _bridgeTokens(MigrationParams memory params, uint256 amountA, uint256 amountB) internal {
+        _bridgeToken(params.tokenA, params.l2TokenA, amountA, params.minGasLimit, "Supermigrate Liquidity");
+        _bridgeToken(params.tokenB, params.l2TokenB, amountB, params.minGasLimit, "Supermigrate Liquidity");
+    }
     /**
      * @notice Quotes the fee for cross-chain messaging
      * @param _dstEid Destination chain ID
@@ -278,6 +301,7 @@ contract LiquidityMigration is OApp {
      * @param _payInLzToken Whether to pay in LZ token
      * @return fee MessagingFee struct containing the fee details
      */
+
     function quote(
         uint32 _dstEid,
         address tokenA,

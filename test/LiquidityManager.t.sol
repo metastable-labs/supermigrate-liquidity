@@ -42,15 +42,9 @@ contract L2LiquidityManagerTest is Test {
         mockFeeRecipient = new MockFeeRecipient();
         endpoint = new MockEndpoint();
 
-        try
-            new L2LiquidityManager(
-                address(router),
-                address(mockFeeRecipient),
-                100,
-                address(endpoint),
-                owner
-            )
-        returns (L2LiquidityManager _liquidityManager) {
+        try new L2LiquidityManager(address(router), address(mockFeeRecipient), 100, address(endpoint), owner) returns (
+            L2LiquidityManager _liquidityManager
+        ) {
             liquidityManager = _liquidityManager;
         } catch Error(string memory reason) {
             console.log("L2LiquidityManager creation failed:", reason);
@@ -59,18 +53,8 @@ contract L2LiquidityManagerTest is Test {
 
         address mockPool = address(0x3);
         address mockGauge = address(0x4);
-        liquidityManager.setPool(
-            address(tokenA),
-            address(tokenB),
-            mockPool,
-            mockGauge
-        );
-        liquidityManager.setPool(
-            address(weth),
-            address(tokenA),
-            mockPool,
-            mockGauge
-        );
+        liquidityManager.setPool(address(tokenA), address(tokenB), mockPool, mockGauge);
+        liquidityManager.setPool(address(weth), address(tokenA), mockPool, mockGauge);
     }
 
     function testDepositLiquidityERC20() public {
@@ -86,27 +70,13 @@ contract L2LiquidityManagerTest is Test {
         tokenB.approve(address(router), amountB);
 
         liquidityManager._depositLiquidity(
-            address(tokenA),
-            address(tokenB),
-            amountA,
-            amountB,
-            amountA,
-            amountB,
-            L2LiquidityManager.PoolType.STABLE
+            address(tokenA), address(tokenB), amountA, amountB, amountA, amountB, L2LiquidityManager.PoolType.STABLE
         );
         vm.stopPrank();
 
         // Check user liquidity (after 1% fee deduction)
-        assertEq(
-            liquidityManager.getUserLiquidity(user, address(tokenA)),
-            99 ether,
-            "Incorrect tokenA liquidity"
-        );
-        assertEq(
-            liquidityManager.getUserLiquidity(user, address(tokenB)),
-            198 ether,
-            "Incorrect tokenB liquidity"
-        );
+        assertEq(liquidityManager.getUserLiquidity(user, address(tokenA)), 99 ether, "Incorrect tokenA liquidity");
+        assertEq(liquidityManager.getUserLiquidity(user, address(tokenB)), 198 ether, "Incorrect tokenB liquidity");
     }
 
     function testDepositLiquidityETH() public {
@@ -131,16 +101,8 @@ contract L2LiquidityManagerTest is Test {
         vm.stopPrank();
 
         // Check user liquidity (after 1% fee deduction)
-        assertEq(
-            liquidityManager.getUserLiquidity(user, address(weth)),
-            0.99 ether,
-            "Incorrect ETH liquidity"
-        );
-        assertEq(
-            liquidityManager.getUserLiquidity(user, address(tokenA)),
-            99 ether,
-            "Incorrect tokenA liquidity"
-        );
+        assertEq(liquidityManager.getUserLiquidity(user, address(weth)), 0.99 ether, "Incorrect ETH liquidity");
+        assertEq(liquidityManager.getUserLiquidity(user, address(tokenA)), 99 ether, "Incorrect tokenA liquidity");
     }
 
     function testDepositLiquidityInsufficientBalance() public {
@@ -156,13 +118,7 @@ contract L2LiquidityManagerTest is Test {
         //vm.expectRevert("ERC20: transfer amount exceeds balance");
         vm.expectRevert();
         liquidityManager._depositLiquidity(
-            address(tokenA),
-            address(tokenB),
-            amountA,
-            amountB,
-            amountA,
-            amountB,
-            L2LiquidityManager.PoolType.STABLE
+            address(tokenA), address(tokenB), amountA, amountB, amountA, amountB, L2LiquidityManager.PoolType.STABLE
         );
         vm.stopPrank();
     }
@@ -211,14 +167,10 @@ contract L2LiquidityManagerTest is Test {
         vm.stopPrank();
     }
 
-    function testFuzz_DepositLiquidity(
-        uint256 amountA,
-        uint256 amountB,
-        uint256 migrationFee
-    ) public {
-        vm.assume(amountA > 1 && amountA <= 100000000 ether);
-        vm.assume(amountB > 1 && amountB <= 100000000 ether);
-        vm.assume(migrationFee >= 1 && migrationFee <= 10000);
+    function testFuzz_DepositLiquidity(uint256 amountA, uint256 amountB, uint256 migrationFee) public {
+        vm.assume(amountA > 1 && amountA <= 100_000_000 ether);
+        vm.assume(amountB > 1 && amountB <= 100_000_000 ether);
+        vm.assume(migrationFee >= 1 && migrationFee <= 10_000);
 
         liquidityManager.setFee(migrationFee);
 
@@ -232,36 +184,18 @@ contract L2LiquidityManagerTest is Test {
         tokenB.approve(address(router), amountB);
 
         liquidityManager._depositLiquidity(
-            address(tokenA),
-            address(tokenB),
-            amountA,
-            amountB,
-            amountA,
-            amountB,
-            L2LiquidityManager.PoolType.STABLE
+            address(tokenA), address(tokenB), amountA, amountB, amountA, amountB, L2LiquidityManager.PoolType.STABLE
         );
         vm.stopPrank();
 
-        assertGe(
-            liquidityManager.getUserLiquidity(user, address(tokenA)),
-            0,
-            "TokenA liquidity should be positive"
-        );
-        assertGe(
-            liquidityManager.getUserLiquidity(user, address(tokenB)),
-            0,
-            "TokenB liquidity should be positive"
-        );
+        assertGe(liquidityManager.getUserLiquidity(user, address(tokenA)), 0, "TokenA liquidity should be positive");
+        assertGe(liquidityManager.getUserLiquidity(user, address(tokenB)), 0, "TokenB liquidity should be positive");
     }
 
-    function testFuzz_DepositLiquidityETH(
-        uint256 amountETH,
-        uint256 amountToken,
-        uint256 migrationFee
-    ) public {
-        vm.assume(amountETH > 1 && amountETH <= 100000000 ether);
-        vm.assume(amountToken > 1 && amountToken <= 100000000 ether);
-        vm.assume(migrationFee >= 1 && migrationFee <= 10000);
+    function testFuzz_DepositLiquidityETH(uint256 amountETH, uint256 amountToken, uint256 migrationFee) public {
+        vm.assume(amountETH > 1 && amountETH <= 100_000_000 ether);
+        vm.assume(amountToken > 1 && amountToken <= 100_000_000 ether);
+        vm.assume(migrationFee >= 1 && migrationFee <= 10_000);
 
         liquidityManager.setFee(migrationFee);
 
@@ -283,95 +217,35 @@ contract L2LiquidityManagerTest is Test {
         );
         vm.stopPrank();
 
-        assertGe(
-            liquidityManager.getUserLiquidity(user, address(weth)),
-            0,
-            "ETH liquidity should be positive"
-        );
-        assertGe(
-            liquidityManager.getUserLiquidity(user, address(tokenA)),
-            0,
-            "TokenA liquidity should be positive"
-        );
+        assertGe(liquidityManager.getUserLiquidity(user, address(weth)), 0, "ETH liquidity should be positive");
+        assertGe(liquidityManager.getUserLiquidity(user, address(tokenA)), 0, "TokenA liquidity should be positive");
     }
 
     function invariant_TotalLiquidityLessThanSupply() public view {
-        uint256 totalLiquidityA = liquidityManager.getUserLiquidity(
-            user,
-            address(tokenA)
-        );
-        uint256 totalLiquidityB = liquidityManager.getUserLiquidity(
-            user,
-            address(tokenB)
-        );
-        uint256 totalLiquidityWETH = liquidityManager.getUserLiquidity(
-            user,
-            address(weth)
-        );
+        uint256 totalLiquidityA = liquidityManager.getUserLiquidity(user, address(tokenA));
+        uint256 totalLiquidityB = liquidityManager.getUserLiquidity(user, address(tokenB));
+        uint256 totalLiquidityWETH = liquidityManager.getUserLiquidity(user, address(weth));
 
-        assertLe(
-            totalLiquidityA,
-            tokenA.totalSupply(),
-            "Total liquidity A exceeds supply"
-        );
-        assertLe(
-            totalLiquidityB,
-            tokenB.totalSupply(),
-            "Total liquidity B exceeds supply"
-        );
-        assertLe(
-            totalLiquidityWETH,
-            address(weth).balance,
-            "Total liquidity WETH exceeds balance"
-        );
+        assertLe(totalLiquidityA, tokenA.totalSupply(), "Total liquidity A exceeds supply");
+        assertLe(totalLiquidityB, tokenB.totalSupply(), "Total liquidity B exceeds supply");
+        assertLe(totalLiquidityWETH, address(weth).balance, "Total liquidity WETH exceeds balance");
     }
 
     function invariant_UserLiquidityNeverNegative() public view {
-        assertGe(
-            liquidityManager.getUserLiquidity(user, address(tokenA)),
-            0,
-            "User liquidity A is negative"
-        );
-        assertGe(
-            liquidityManager.getUserLiquidity(user, address(tokenB)),
-            0,
-            "User liquidity B is negative"
-        );
-        assertGe(
-            liquidityManager.getUserLiquidity(user, address(weth)),
-            0,
-            "User liquidity WETH is negative"
-        );
+        assertGe(liquidityManager.getUserLiquidity(user, address(tokenA)), 0, "User liquidity A is negative");
+        assertGe(liquidityManager.getUserLiquidity(user, address(tokenB)), 0, "User liquidity B is negative");
+        assertGe(liquidityManager.getUserLiquidity(user, address(weth)), 0, "User liquidity WETH is negative");
     }
 
     function invariant_ContractBalanceExceedsLiquidity() public view {
-        uint256 totalLiquidityA = liquidityManager.getUserLiquidity(
-            user,
-            address(tokenA)
-        );
-        uint256 totalLiquidityB = liquidityManager.getUserLiquidity(
-            user,
-            address(tokenB)
-        );
-        uint256 totalLiquidityWETH = liquidityManager.getUserLiquidity(
-            user,
-            address(weth)
-        );
+        uint256 totalLiquidityA = liquidityManager.getUserLiquidity(user, address(tokenA));
+        uint256 totalLiquidityB = liquidityManager.getUserLiquidity(user, address(tokenB));
+        uint256 totalLiquidityWETH = liquidityManager.getUserLiquidity(user, address(weth));
 
+        assertGe(tokenA.balanceOf(address(liquidityManager)), totalLiquidityA, "Contract balance A less than liquidity");
+        assertGe(tokenB.balanceOf(address(liquidityManager)), totalLiquidityB, "Contract balance B less than liquidity");
         assertGe(
-            tokenA.balanceOf(address(liquidityManager)),
-            totalLiquidityA,
-            "Contract balance A less than liquidity"
-        );
-        assertGe(
-            tokenB.balanceOf(address(liquidityManager)),
-            totalLiquidityB,
-            "Contract balance B less than liquidity"
-        );
-        assertGe(
-            weth.balanceOf(address(liquidityManager)),
-            totalLiquidityWETH,
-            "Contract WETH balance less than liquidity"
+            weth.balanceOf(address(liquidityManager)), totalLiquidityWETH, "Contract WETH balance less than liquidity"
         );
     }
 
@@ -382,31 +256,16 @@ contract L2LiquidityManagerTest is Test {
         vm.prank(owner);
         liquidityManager.setFee(newFee);
 
-        assertEq(
-            liquidityManager.migrationFee(),
-            newFee,
-            "Fee not set correctly"
-        );
+        assertEq(liquidityManager.migrationFee(), newFee, "Fee not set correctly");
     }
 
-    function testFuzz_SetPool(
-        address tokenX,
-        address tokenY,
-        address pool,
-        address gauge
-    ) public {
-        vm.assume(
-            tokenX != address(0) &&
-                tokenY != address(0) &&
-                tokenX != tokenY &&
-                pool != address(0)
-        );
+    function testFuzz_SetPool(address tokenX, address tokenY, address pool, address gauge) public {
+        vm.assume(tokenX != address(0) && tokenY != address(0) && tokenX != tokenY && pool != address(0));
 
         vm.prank(owner);
         liquidityManager.setPool(tokenX, tokenY, pool, gauge);
 
-        (address returnedPool, address returnedGauge) = liquidityManager
-            .getPool(tokenX, tokenY);
+        (address returnedPool, address returnedGauge) = liquidityManager.getPool(tokenX, tokenY);
         assertEq(returnedPool, pool, "Pool not set correctly");
         assertEq(returnedGauge, gauge, "Gauge not set correctly");
     }

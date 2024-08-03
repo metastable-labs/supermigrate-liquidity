@@ -192,20 +192,20 @@ contract L2LiquidityManager is OApp {
      * @param amount Amount to deduct fee from
      * @return uint256 Amount after fee deduction
      */
-function deductFee(address token, uint256 amount) private returns (uint256) {
-    uint256 precisionFactor = 1e18;
-    uint256 feeAmount = (amount * migrationFee * precisionFactor) / FEE_DENOMINATOR;
-    feeAmount = (feeAmount + precisionFactor - 1) / precisionFactor;
-    if (feeAmount > 0) {
-        if (token == address(aerodromeRouter.weth())) {
-            aerodromeRouter.weth().deposit{value: feeAmount}();
-            IERC20(aerodromeRouter.weth()).transfer(feeReceiver, feeAmount);
-        } else {
-            IERC20(token).transferFrom(_msgSender(), feeReceiver, feeAmount);
+    function deductFee(address token, uint256 amount) private returns (uint256) {
+        uint256 precisionFactor = 1e18;
+        uint256 feeAmount = (amount * migrationFee * precisionFactor) / FEE_DENOMINATOR;
+        feeAmount = (feeAmount + precisionFactor - 1) / precisionFactor;
+        if (feeAmount > 0) {
+            if (token == address(aerodromeRouter.weth())) {
+                aerodromeRouter.weth().deposit{value: feeAmount}();
+                IERC20(aerodromeRouter.weth()).transfer(feeReceiver, feeAmount);
+            } else {
+                IERC20(token).transferFrom(_msgSender(), feeReceiver, feeAmount);
+            }
         }
+        return amount - feeAmount;
     }
-    return amount - feeAmount;
-}
 
     /**
      * @notice Deposits liquidity into Aerodrome

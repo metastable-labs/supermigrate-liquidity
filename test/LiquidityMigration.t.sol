@@ -84,42 +84,30 @@ contract LiquidityMigrationTest is Test {
         lpToken.approve(address(liquidityMigration), liquidity);
 
         l1StandardBridge.setExpectedCalls(
-            address(tokenA),
-            address(l2TokenA),
-            150 ether,
-            address(tokenB),
-            address(l2TokenB),
-            250 ether
+            address(tokenA), address(l2TokenA), 150 ether, address(tokenB), address(l2TokenB), 250 ether
         );
 
-        liquidityMigration.migrateERC20Liquidity(
-            TEST_CHAIN_ID,
-            address(tokenA),
-            address(tokenB),
-            address(l2TokenA),
-            address(l2TokenB),
-            liquidity,
-            amountAMin,
-            amountBMin,
-            deadline,
-            100000,
-            "", // options
-            LiquidityMigration.PoolType.VOLATILE,
-            true
-        );
+        LiquidityMigration.MigrationParams memory params = LiquidityMigration.MigrationParams({
+            dstEid: TEST_CHAIN_ID,
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
+            l2TokenA: address(l2TokenA),
+            l2TokenB: address(l2TokenB),
+            liquidity: liquidity,
+            amountAMin: amountAMin,
+            amountBMin: amountBMin,
+            deadline: deadline,
+            minGasLimit: 100_000,
+            poolType: LiquidityMigration.PoolType.VOLATILE,
+            stakeLPtokens: true
+        });
+
+        liquidityMigration.migrateERC20Liquidity(params, "");
 
         vm.stopPrank();
 
-        assertEq(
-            l1StandardBridge.getBridgedAmount(address(tokenA)),
-            150 ether,
-            "Incorrect bridged amount for tokenA"
-        );
-        assertEq(
-            l1StandardBridge.getBridgedAmount(address(tokenB)),
-            250 ether,
-            "Incorrect bridged amount for tokenB"
-        );
+        assertEq(l1StandardBridge.getBridgedAmount(address(tokenA)), 150 ether, "Incorrect bridged amount for tokenA");
+        assertEq(l1StandardBridge.getBridgedAmount(address(tokenB)), 250 ether, "Incorrect bridged amount for tokenB");
     }
 
     function testMigrateERC20LiquidityV3() public {
@@ -146,10 +134,7 @@ contract LiquidityMigrationTest is Test {
         );
 
         uniswapV3Factory.createPool(address(tokenA), address(tokenB), 3000);
-        nonfungiblePositionManager.setDecreaseLiquidityReturn(
-            150 ether,
-            250 ether
-        );
+        nonfungiblePositionManager.setDecreaseLiquidityReturn(150 ether, 250 ether);
 
         bytes32 mockPeer = bytes32(uint256(uint160(address(0x123))));
         OAppCore(address(liquidityMigration)).setPeer(TEST_CHAIN_ID, mockPeer);
@@ -158,60 +143,37 @@ contract LiquidityMigrationTest is Test {
 
         tokenA.approve(address(liquidityMigration), 1000 ether);
         tokenB.approve(address(liquidityMigration), 1000 ether);
-        nonfungiblePositionManager.approve(
-            address(liquidityMigration),
-            tokenId
-        );
+        nonfungiblePositionManager.approve(address(liquidityMigration), tokenId);
 
         l1StandardBridge.setExpectedCalls(
-            address(tokenA),
-            address(l2TokenA),
-            150 ether,
-            address(tokenB),
-            address(l2TokenB),
-            250 ether
+            address(tokenA), address(l2TokenA), 150 ether, address(tokenB), address(l2TokenB), 250 ether
         );
 
-        vm.expectCall(
-            address(nonfungiblePositionManager),
-            abi.encodeCall(nonfungiblePositionManager.burn, (tokenId))
-        );
+        vm.expectCall(address(nonfungiblePositionManager), abi.encodeCall(nonfungiblePositionManager.burn, (tokenId)));
 
-        // Execute migration
-        liquidityMigration.migrateERC20Liquidity(
-            TEST_CHAIN_ID,
-            address(tokenA),
-            address(tokenB),
-            address(l2TokenA),
-            address(l2TokenB),
-            tokenId,
-            amountAMin,
-            amountBMin,
-            block.timestamp + 1 hours,
-            100000, // minGasLimit
-            "", // options
-            LiquidityMigration.PoolType.CONCENTRATED,
-            true
-        );
+        LiquidityMigration.MigrationParams memory params = LiquidityMigration.MigrationParams({
+            dstEid: TEST_CHAIN_ID,
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
+            l2TokenA: address(l2TokenA),
+            l2TokenB: address(l2TokenB),
+            liquidity: tokenId,
+            amountAMin: amountAMin,
+            amountBMin: amountBMin,
+            deadline: block.timestamp + 1 hours,
+            minGasLimit: 100_000,
+            poolType: LiquidityMigration.PoolType.CONCENTRATED,
+            stakeLPtokens: true
+        });
+
+        liquidityMigration.migrateERC20Liquidity(params, "");
 
         vm.stopPrank();
 
-        assertEq(
-            l1StandardBridge.getBridgedAmount(address(tokenA)),
-            150 ether,
-            "Incorrect bridged amount for tokenA"
-        );
-        assertEq(
-            l1StandardBridge.getBridgedAmount(address(tokenB)),
-            250 ether,
-            "Incorrect bridged amount for tokenB"
-        );
+        assertEq(l1StandardBridge.getBridgedAmount(address(tokenA)), 150 ether, "Incorrect bridged amount for tokenA");
+        assertEq(l1StandardBridge.getBridgedAmount(address(tokenB)), 250 ether, "Incorrect bridged amount for tokenB");
 
-        assertEq(
-            nonfungiblePositionManager.ownerOf(tokenId),
-            address(0),
-            "NFT should be burned"
-        );
+        assertEq(nonfungiblePositionManager.ownerOf(tokenId), address(0), "NFT should be burned");
     }
 
     function testMigrateERC20LiquidityInsufficientLiquidity() public {
@@ -239,35 +201,32 @@ contract LiquidityMigrationTest is Test {
         tokenB.approve(address(liquidityMigration), liquidity);
         lpToken.approve(address(liquidityMigration), liquidity);
 
+        LiquidityMigration.MigrationParams memory params = LiquidityMigration.MigrationParams({
+            dstEid: TEST_CHAIN_ID,
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
+            l2TokenA: address(l2TokenA),
+            l2TokenB: address(l2TokenB),
+            liquidity: liquidity,
+            amountAMin: amountAMin,
+            amountBMin: amountBMin,
+            deadline: deadline,
+            minGasLimit: 100_000,
+            poolType: LiquidityMigration.PoolType.VOLATILE,
+            stakeLPtokens: true
+        });
+
         vm.expectRevert("UniswapV2Router: INSUFFICIENT_A_AMOUNT");
-        liquidityMigration.migrateERC20Liquidity(
-            TEST_CHAIN_ID,
-            address(tokenA),
-            address(tokenB),
-            address(l2TokenA),
-            address(l2TokenB),
-            liquidity,
-            amountAMin,
-            amountBMin,
-            deadline,
-            100000,
-            "", // options
-            LiquidityMigration.PoolType.VOLATILE,
-            true
-        );
+        liquidityMigration.migrateERC20Liquidity(params, "");
         vm.stopPrank();
     }
 
     function testIsV3Pool() public {
         uniswapV3Factory.createPool(address(tokenA), address(tokenB), 3000);
-        assertTrue(
-            liquidityMigration.isV3Pool(address(tokenA), address(tokenB))
-        );
+        assertTrue(liquidityMigration.isV3Pool(address(tokenA), address(tokenB)));
 
         address tokenC = address(new MockERC20("Token C", "TKNC"));
-        assertFalse(
-            liquidityMigration.isV3Pool(address(tokenA), address(tokenC))
-        );
+        assertFalse(liquidityMigration.isV3Pool(address(tokenA), address(tokenC)));
     }
 
     function testFuzz_MigrateERC20Liquidity(
@@ -280,37 +239,20 @@ contract LiquidityMigrationTest is Test {
         bool stakeLPtokens
     ) public {
         vm.assume(liquidity > 0 && liquidity < type(uint128).max);
-        vm.assume(
-            amountAMin < liquidity &&
-                amountBMin < liquidity &&
-                amountAMin + amountBMin < liquidity
-        );
+        vm.assume(amountAMin < liquidity && amountBMin < liquidity && amountAMin + amountBMin < liquidity);
         vm.assume(deadline > block.timestamp);
         MockERC20 lpToken = new MockERC20("LP Token", "LP");
 
         if (isV3) {
             uniswapV3Factory.createPool(address(tokenA), address(tokenB), 3000);
             nonfungiblePositionManager.setPosition(
-                1,
-                address(tokenA),
-                address(tokenB),
-                3000,
-                -100,
-                100,
-                uint128(liquidity)
+                1, address(tokenA), address(tokenB), 3000, -100, 100, uint128(liquidity)
             );
-            nonfungiblePositionManager.setDecreaseLiquidityReturn(
-                amountAMin,
-                amountBMin
-            );
+            nonfungiblePositionManager.setDecreaseLiquidityReturn(amountAMin, amountBMin);
             nonfungiblePositionManager.mint(user, 1);
         } else {
             address mockPair = address(lpToken);
-            uniswapV2Factory.setPair(
-                address(tokenA),
-                address(tokenB),
-                mockPair
-            );
+            uniswapV2Factory.setPair(address(tokenA), address(tokenB), mockPair);
             uniswapV2Router.setRemoveLiquidityReturn(amountAMin, amountBMin);
             lpToken.mint(user, liquidity);
         }
@@ -333,80 +275,70 @@ contract LiquidityMigrationTest is Test {
         }
 
         l1StandardBridge.setExpectedCalls(
-            address(tokenA),
-            address(l2TokenA),
-            amountAMin,
-            address(tokenB),
-            address(l2TokenB),
-            amountBMin
+            address(tokenA), address(l2TokenA), amountAMin, address(tokenB), address(l2TokenB), amountBMin
         );
 
-        liquidityMigration.migrateERC20Liquidity(
-            TEST_CHAIN_ID,
-            address(tokenA),
-            address(tokenB),
-            address(l2TokenA),
-            address(l2TokenB),
-            isV3 ? 1 : liquidity,
-            amountAMin,
-            amountBMin,
-            deadline,
-            minGasLimit,
-            "",
-            isV3
-                ? LiquidityMigration.PoolType.CONCENTRATED
-                : LiquidityMigration.PoolType.VOLATILE,
-            stakeLPtokens
-        );
+        LiquidityMigration.MigrationParams memory params = LiquidityMigration.MigrationParams({
+            dstEid: TEST_CHAIN_ID,
+            tokenA: address(tokenA),
+            tokenB: address(tokenB),
+            l2TokenA: address(l2TokenA),
+            l2TokenB: address(l2TokenB),
+            liquidity: isV3 ? 1 : liquidity,
+            amountAMin: amountAMin,
+            amountBMin: amountBMin,
+            deadline: deadline,
+            minGasLimit: minGasLimit,
+            poolType: isV3 ? LiquidityMigration.PoolType.CONCENTRATED : LiquidityMigration.PoolType.VOLATILE,
+            stakeLPtokens: stakeLPtokens
+        });
+
+        liquidityMigration.migrateERC20Liquidity(params, "");
 
         vm.stopPrank();
 
-        assertEq(
-            l1StandardBridge.getBridgedAmount(address(tokenA)),
-            amountAMin
-        );
-        assertEq(
-            l1StandardBridge.getBridgedAmount(address(tokenB)),
-            amountBMin
-        );
+        assertEq(l1StandardBridge.getBridgedAmount(address(tokenA)), amountAMin);
+        assertEq(l1StandardBridge.getBridgedAmount(address(tokenB)), amountBMin);
     }
 
     function invariant_CannotMigrateIdenticalTokens() public {
+        LiquidityMigration.MigrationParams memory params = LiquidityMigration.MigrationParams({
+            dstEid: TEST_CHAIN_ID,
+            tokenA: address(tokenA),
+            tokenB: address(tokenA),
+            l2TokenA: address(l2TokenA),
+            l2TokenB: address(l2TokenA),
+            liquidity: 1000 ether,
+            amountAMin: 100 ether,
+            amountBMin: 100 ether,
+            deadline: block.timestamp + 1 hours,
+            minGasLimit: 100_000,
+            poolType: LiquidityMigration.PoolType.VOLATILE,
+            stakeLPtokens: true
+        });
+
         vm.expectRevert("Identical addresses");
-        liquidityMigration.migrateERC20Liquidity(
-            TEST_CHAIN_ID,
-            address(tokenA),
-            address(tokenA),
-            address(l2TokenA),
-            address(l2TokenA),
-            1000 ether,
-            100 ether,
-            100 ether,
-            block.timestamp + 1 hours,
-            100000,
-            "",
-            LiquidityMigration.PoolType.VOLATILE,
-            true
-        );
+        liquidityMigration.migrateERC20Liquidity(params, "");
     }
 
     function invariant_CannotMigrateNonExistentPool() public {
         address nonExistentToken = address(0xdead);
+        LiquidityMigration.MigrationParams memory params = LiquidityMigration.MigrationParams({
+            dstEid: TEST_CHAIN_ID,
+            tokenA: address(tokenA),
+            tokenB: nonExistentToken,
+            l2TokenA: address(l2TokenA),
+            l2TokenB: address(0x123),
+            liquidity: 1000 ether,
+            amountAMin: 100 ether,
+            amountBMin: 100 ether,
+            deadline: block.timestamp + 1 hours,
+            minGasLimit: 100_000,
+            poolType: LiquidityMigration.PoolType.VOLATILE,
+            stakeLPtokens: true
+        });
+
         vm.expectRevert("V2: Pool does not exist");
-        liquidityMigration.migrateERC20Liquidity(
-            TEST_CHAIN_ID,
-            address(tokenA),
-            nonExistentToken,
-            address(l2TokenA),
-            address(0x123),
-            1000 ether,
-            100 ether,
-            100 ether,
-            block.timestamp + 1 hours,
-            100000,
-            "",
-            LiquidityMigration.PoolType.VOLATILE,
-            true
-        );
+        liquidityMigration.migrateERC20Liquidity(params, "");
     }
 }
