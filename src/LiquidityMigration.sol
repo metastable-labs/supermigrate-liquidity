@@ -461,9 +461,6 @@ contract LiquidityMigration is OApp {
         emit TokensBridged(l2Token, amount);
     }
 
-    // Internal functions (_removeV2Liquidity, _removeV3Liquidity, _bridgeToken) remain unchanged
-    // but should also be documented with NatSpec in the actual implementation
-
     /**
      * @dev Internal function to handle incoming LayerZero messages
      * @notice This contract doesn't receive messages, so this function always reverts
