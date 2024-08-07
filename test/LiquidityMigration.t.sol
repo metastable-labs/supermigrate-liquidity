@@ -61,6 +61,7 @@ contract LiquidityMigrationTest is Test {
 
     function testMigrateERC20LiquidityV2() public {
         uint256 liquidity = 1000 ether;
+        uint256 tokenId = 1;
         uint256 amountAMin = 100 ether;
         uint256 amountBMin = 200 ether;
         uint256 deadline = block.timestamp + 1 hours;
@@ -94,6 +95,7 @@ contract LiquidityMigrationTest is Test {
             l2TokenA: address(l2TokenA),
             l2TokenB: address(l2TokenB),
             liquidity: liquidity,
+            tokenId: tokenId,
             amountAMin: amountAMin,
             amountBMin: amountBMin,
             deadline: deadline,
