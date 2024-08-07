@@ -61,7 +61,6 @@ contract LiquidityMigrationTest is Test {
 
     function testMigrateERC20LiquidityV2() public {
         uint256 liquidity = 1000 ether;
-        uint256 tokenId = 1;
         uint256 amountAMin = 100 ether;
         uint256 amountBMin = 200 ether;
         uint256 deadline = block.timestamp + 1 hours;
@@ -95,7 +94,7 @@ contract LiquidityMigrationTest is Test {
             l2TokenA: address(l2TokenA),
             l2TokenB: address(l2TokenB),
             liquidity: liquidity,
-            tokenId: tokenId,
+            tokenId: 0,
             amountAMin: amountAMin,
             amountBMin: amountBMin,
             deadline: deadline,
@@ -160,6 +159,7 @@ contract LiquidityMigrationTest is Test {
             l2TokenA: address(l2TokenA),
             l2TokenB: address(l2TokenB),
             liquidity: tokenId,
+            tokenId: tokenId,
             amountAMin: amountAMin,
             amountBMin: amountBMin,
             deadline: block.timestamp + 1 hours,
@@ -210,6 +210,7 @@ contract LiquidityMigrationTest is Test {
             l2TokenA: address(l2TokenA),
             l2TokenB: address(l2TokenB),
             liquidity: liquidity,
+            tokenId: 0,
             amountAMin: amountAMin,
             amountBMin: amountBMin,
             deadline: deadline,
@@ -287,6 +288,7 @@ contract LiquidityMigrationTest is Test {
             l2TokenA: address(l2TokenA),
             l2TokenB: address(l2TokenB),
             liquidity: isV3 ? 1 : liquidity,
+            tokenId: 0,
             amountAMin: amountAMin,
             amountBMin: amountBMin,
             deadline: deadline,
@@ -311,6 +313,7 @@ contract LiquidityMigrationTest is Test {
             l2TokenA: address(l2TokenA),
             l2TokenB: address(l2TokenA),
             liquidity: 1000 ether,
+            tokenId: 0,
             amountAMin: 100 ether,
             amountBMin: 100 ether,
             deadline: block.timestamp + 1 hours,
@@ -332,6 +335,7 @@ contract LiquidityMigrationTest is Test {
             l2TokenA: address(l2TokenA),
             l2TokenB: address(0x123),
             liquidity: 1000 ether,
+            tokenId: 0,
             amountAMin: 100 ether,
             amountBMin: 100 ether,
             deadline: block.timestamp + 1 hours,
