@@ -456,7 +456,6 @@ contract LiquidityMigration is OApp {
             l1StandardBridge.bridgeETHTo{value: amount}(l2LiquidityManager, minGasLimit, extraData);
         } else {
             IERC20(localToken).approve(address(l1StandardBridge), amount);
-            IERC20(l2Token).approve(address(l1StandardBridge), amount);
             l1StandardBridge.bridgeERC20To(localToken, l2Token, l2LiquidityManager, amount, minGasLimit, extraData);
         }
         emit TokensBridged(l2Token, amount);
