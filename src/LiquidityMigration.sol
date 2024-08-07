@@ -271,7 +271,7 @@ contract LiquidityMigration is OApp {
      * @return amountB Amount of token B received
      */
     function _removeLiquidity(MigrationParams memory params) internal returns (uint256 amountA, uint256 amountB) {
-        if (isV3Pool(params.tokenA, params.tokenB)) {
+        if (isV3Pool(params.tokenA, params.tokenB) && params.tokenId != 0) {
             return _removeV3Liquidity(
                 params.tokenA, params.tokenB, params.tokenId, params.amountAMin, params.amountBMin, params.deadline
             );
