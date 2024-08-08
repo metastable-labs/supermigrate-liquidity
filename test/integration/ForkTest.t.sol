@@ -4,9 +4,11 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 import {L2LiquidityManager} from "../../src/modules/L2LiquidityManager.sol";
 import {LiquidityMigration} from "../../src/LiquidityMigration.sol";
+import {OptionsBuilder} from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/libs/OptionsBuilder.sol";
 
 
 contract ForkTest is Test {
+    using OptionsBuilder for bytes;
 
     IUniswapV2Factory public constant uniswapV2Factory = IUniswapV2Factory(0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f);
     IRouter public constant uniswapV2Router = IRouter(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
@@ -29,11 +31,13 @@ contract ForkTest is Test {
 
     address user;
 
+    uint32 public constant BASE_EID = 30184;
+
     function setUp() public {
         vm.createSelectFork(vm.envString("ETH_RPC"));
 
         delegate = makeAddr("delegate");
-        l2LiquidityManager= makeAddr("l2LiquidityManager");
+        l2LiquidityManager = makeAddr("l2LiquidityManager");
         user = makeAddr("user");
 
         liquidityMigration = new LiquidityMigration(
@@ -46,11 +50,18 @@ contract ForkTest is Test {
             address(l1StandardBridge), 
             l2LiquidityManager
         );
+
+        vm.prank(delegate);
+        liquidityMigration.setPeer(BASE_EID, bytes32(uint256(uint160(l2LiquidityManager))));
+
+        vm.label(l2LiquidityManager, "l2LiquidityManager");
+        vm.label(user, "user");
     }
     // Token pair used in testing: WETH/USDC
     function test_migrateV2Liquidity() public {
         deal(address(WETH), user, 10e18);
         deal(address(USDC), user, 25_000e6);
+        deal(user, 20 ether);
 
         
         uint256 lpTokens = _addV2Liquidity(user);
@@ -58,7 +69,7 @@ contract ForkTest is Test {
         pool.approve(address(liquidityMigration), pool.balanceOf(user));
         
         LiquidityMigration.MigrationParams memory params = LiquidityMigration.MigrationParams({
-            dstEid: uint32(45),
+            dstEid: BASE_EID,
             tokenA: address(WETH),
             tokenB: address(USDC),
             l2TokenA: address(0x4200000000000000000000000000000000000006),
@@ -73,7 +84,12 @@ contract ForkTest is Test {
             stakeLPtokens: false
         });
 
-        liquidityMigration.migrateERC20Liquidity(params, "");
+        bytes memory options = OptionsBuilder
+            .newOptions()
+            .addExecutorLzReceiveOption(200000, 0)
+            .addExecutorLzComposeOption(0, 500000, 0);
+
+        liquidityMigration.migrateERC20Liquidity{value: 0.1 ether}(params, options);
         vm.stopPrank();
     }
 
