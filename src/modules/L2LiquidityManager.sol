@@ -25,8 +25,8 @@ contract L2LiquidityManager is OApp {
 
     /// @dev 10000 = 100%, 5000 = 50%, 100 = 1%, 1 = 0.01%
     uint256 public constant FEE_DENOMINATOR = 10_000;
-    /// @dev Liquidity slippage tolerance: 0.1%
-    uint256 public constant LIQ_SLIPPAGE = 10;
+    /// @dev Liquidity slippage tolerance: 0.3%
+    uint256 public constant LIQ_SLIPPAGE = 30;
     uint256 public migrationFee;
     address public feeReceiver;
 
