@@ -366,8 +366,6 @@ contract L2LiquidityManager is OApp {
         address _executor,
         bytes calldata _extraData
     ) internal override {
-        // Ensure the message is from the trusted remote on the source chain
-        require(_checkTrustedRemote(_origin), "L2LiquidityManager: Invalid remote sender");
         (
             address tokenA,
             address tokenB,
