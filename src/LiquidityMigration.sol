@@ -122,8 +122,6 @@ interface StandardBridge {
         uint256 amount,
         bytes extraData
     );
-    event ETHBridgeFinalized(address indexed from, address indexed to, uint256 amount, bytes extraData);
-    event ETHBridgeInitiated(address indexed from, address indexed to, uint256 amount, bytes extraData);
 
     function bridgeERC20(
         address _localToken,
@@ -140,9 +138,9 @@ interface StandardBridge {
         uint32 _minGasLimit,
         bytes memory _extraData
     ) external;
-    function bridgeETH(uint32 _minGasLimit, bytes memory _extraData) external payable;
-    function bridgeETHTo(address _to, uint32 _minGasLimit, bytes memory _extraData) external payable;
+
     function deposits(address, address) external view returns (uint256);
+
     function finalizeBridgeERC20(
         address _localToken,
         address _remoteToken,
@@ -151,7 +149,7 @@ interface StandardBridge {
         uint256 _amount,
         bytes memory _extraData
     ) external;
-    function finalizeBridgeETH(address _from, address _to, uint256 _amount, bytes memory _extraData) external payable;
+
     function messenger() external view returns (address);
     function OTHER_BRIDGE() external view returns (address);
 }
@@ -452,12 +450,9 @@ contract LiquidityMigration is OApp {
         uint32 minGasLimit,
         bytes memory extraData
     ) internal {
-        if (localToken == address(0)) {
-            l1StandardBridge.bridgeETHTo{value: amount}(l2LiquidityManager, minGasLimit, extraData);
-        } else {
-            IERC20(localToken).approve(address(l1StandardBridge), amount);
-            l1StandardBridge.bridgeERC20To(localToken, l2Token, l2LiquidityManager, amount, minGasLimit, extraData);
-        }
+        IERC20(localToken).approve(address(l1StandardBridge), amount);
+        l1StandardBridge.bridgeERC20To(localToken, l2Token, l2LiquidityManager, amount, minGasLimit, extraData);
+        
         emit TokensBridged(l2Token, amount);
     }
 
