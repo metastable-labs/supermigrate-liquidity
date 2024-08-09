@@ -1,4 +1,5 @@
 import {Test, console} from "forge-std/Test.sol";
+import {Vm} from "forge-std/Vm.sol";
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
@@ -6,10 +7,14 @@ import {L2LiquidityManager} from "../../src/modules/L2LiquidityManager.sol";
 import {LiquidityMigration} from "../../src/LiquidityMigration.sol";
 import {OptionsBuilder} from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/libs/OptionsBuilder.sol";
 
+import {Origin} from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/OApp.sol";
+import {MessagingReceipt} from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/OAppSender.sol";
+
 
 contract ForkTest is Test {
     using OptionsBuilder for bytes;
 
+    // ETH CONTRACTS
     IUniswapV2Factory public constant uniswapV2Factory = IUniswapV2Factory(0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f);
     IRouter public constant uniswapV2Router = IRouter(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
     IUniswapV3Factory public constant uniswapV3Factory = IUniswapV3Factory(0x1F98431c8aD98523631AE4a59f267346ea31F984);
@@ -18,51 +23,106 @@ contract ForkTest is Test {
     StandardBridge public constant l1StandardBridge 
         = StandardBridge(0x3154Cf16ccdb4C6d922629664174b904d80F2C35); // base l1 standard bridge
 
+    // ETH TOKENS
     ERC20 WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
     ERC20 USDC = ERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
     ERC20 pool = ERC20(0xB4e16d0168e52d35CaCD2c6185b44281Ec28C9Dc);
 
-    address public constant endpoint = 0x1a44076050125825900e736c501f859c50fE728c;
+    // BASE CONTRACTS
+    IUniswapV2Factory public constant base_uniswapV2Factory = IUniswapV2Factory(0x8909Dc15e40173Ff4699343b6eB8132c65e18eC6);
+    IRouter public constant base_uniswapV2Router = IRouter(0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24);
+    IUniswapV3Factory public constant base_uniswapV3Factory = IUniswapV3Factory(0x33128a8fC17869897dcE68Ed026d694621f6FDfD);
+    INonfungiblePositionManager public constant base_nonfungiblePositionManager 
+        = INonfungiblePositionManager(0x03a520b32C04BF3bEEf7BEb72E919cf822Ed34f1);
+    address public constant base_gauge  = 0x519BBD1Dd8C6A94C46080E24f316c14Ee758C025;
+
+    // BASE TOKENS
+    ERC20 base_WETH = ERC20(0x4200000000000000000000000000000000000006);
+    ERC20 base_bridgedUSDC = ERC20(0xd9aAEc86B65D86f6A7B5B1b0c42FFA531710b6CA);
+    ERC20 base_USDC = ERC20(0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913);
+    ERC20 base_pool = ERC20(0xcDAC0d6c6C59727a65F871236188350531885C43);
+
+
+    address public constant endpointMainnet = 0x1a44076050125825900e736c501f859c50fE728c;
+    address public constant endpointBase = 0x1a44076050125825900e736c501f859c50fE728c;
+
+    address public constant aerodromeRouter = 0xcF77a3Ba9A5CA399B7c97c74d54e5b1Beb874E43;
+
 
     address public delegate;
-    address public l2LiquidityManager;
 
+    L2LiquidityManager l2LiquidityManager;
     LiquidityMigration liquidityMigration;
 
     address user;
+    address feeReceiver;
 
+    uint32 public constant ETH_EID = 30101;
     uint32 public constant BASE_EID = 30184;
 
+    uint256 ethFork;
+    uint256 baseFork;
+
+    uint256 public constant MIGRATION_FEE = 10; // 0.1%
+
     function setUp() public {
-        vm.createSelectFork(vm.envString("ETH_RPC"));
+
+        ///////////////
+        // L2 SETUP////
+        ///////////////
+        baseFork = vm.createSelectFork(vm.envString("BASE_RPC"));
+
 
         delegate = makeAddr("delegate");
-        l2LiquidityManager = makeAddr("l2LiquidityManager");
+        feeReceiver = makeAddr("feeReceiver");
+        
+        l2LiquidityManager = new L2LiquidityManager(aerodromeRouter, feeReceiver, MIGRATION_FEE, endpointBase, delegate);
+
+        ///////////////
+        // L1 SETUP////
+        ///////////////
+        ethFork = vm.createSelectFork(vm.envString("ETH_RPC"));
+
+        
         user = makeAddr("user");
 
         liquidityMigration = new LiquidityMigration(
-            endpoint, 
+            endpointMainnet, 
             delegate, 
             address(uniswapV2Factory), 
             address(uniswapV2Router), 
             address(uniswapV3Factory), 
             address(nonfungiblePositionManager), 
             address(l1StandardBridge), 
-            l2LiquidityManager
+            address(l2LiquidityManager)
         );
 
         vm.prank(delegate);
-        liquidityMigration.setPeer(BASE_EID, bytes32(uint256(uint160(l2LiquidityManager))));
+        liquidityMigration.setPeer(BASE_EID, bytes32(uint256(uint160(address(l2LiquidityManager)))));
 
-        vm.label(l2LiquidityManager, "l2LiquidityManager");
+
+        ////////////////
+        // L2 CONFIG////
+        //////////////// 
+        vm.selectFork(baseFork);
+        vm.startPrank(delegate);
+        l2LiquidityManager.setPeer(ETH_EID, bytes32(uint256(uint160(address(liquidityMigration)))));
+        l2LiquidityManager.setPool(address(base_USDC), address(base_WETH), address(base_pool), base_gauge);
+        vm.stopPrank();
+
+
+
+
+
+        vm.label(address(l2LiquidityManager), "l2LiquidityManager");
         vm.label(user, "user");
     }
     // Token pair used in testing: WETH/USDC
     function test_migrateV2Liquidity() public {
+        vm.selectFork(ethFork);
         deal(address(WETH), user, 10e18);
         deal(address(USDC), user, 25_000e6);
         deal(user, 20 ether);
-
         
         uint256 lpTokens = _addV2Liquidity(user);
 
@@ -72,8 +132,8 @@ contract ForkTest is Test {
             dstEid: BASE_EID,
             tokenA: address(WETH),
             tokenB: address(USDC),
-            l2TokenA: address(0x4200000000000000000000000000000000000006),
-            l2TokenB: address(0xd9aAEc86B65D86f6A7B5B1b0c42FFA531710b6CA),
+            l2TokenA: address(base_WETH),
+            l2TokenB: address(base_USDC),
             liquidity: lpTokens,
             tokenId: 0,
             amountAMin: 0,       
@@ -84,13 +144,37 @@ contract ForkTest is Test {
             stakeLPtokens: false
         });
 
+        // Example options
         bytes memory options = OptionsBuilder
             .newOptions()
             .addExecutorLzReceiveOption(200000, 0)
             .addExecutorLzComposeOption(0, 500000, 0);
 
-        liquidityMigration.migrateERC20Liquidity{value: 0.1 ether}(params, options);
+        vm.recordLogs();
+        MessagingReceipt memory receipt = liquidityMigration.migrateERC20Liquidity{value: 0.1 ether}(params, options);
         vm.stopPrank();
+
+        Vm.Log[] memory entries = vm.getRecordedLogs();
+        // can make this more robust if needed
+        (,,uint256 amountA, uint256 amountB) = abi.decode(entries[8].data, (address, address, uint256, uint256));
+
+        bytes memory messageSent = abi.encode(
+            params.l2TokenA, params.l2TokenB, amountA, amountB, user, params.poolType, params.stakeLPtokens
+        );
+
+        // Now switch to Base
+        vm.selectFork(baseFork);
+        
+        // Simulate bridged tokens
+        deal(params.l2TokenA, address(l2LiquidityManager), amountA);
+        deal(params.l2TokenB, address(l2LiquidityManager), amountB);
+
+        address executor = makeAddr("executor");
+
+        Origin memory origin = Origin(ETH_EID, bytes32(uint256(uint160(address(liquidityMigration)))), receipt.nonce);
+        vm.prank(endpointBase);
+
+        l2LiquidityManager.lzReceive(origin, receipt.guid, messageSent, executor, "");
     }
 
     function _addV2Liquidity(address _user) internal returns(uint256 lpTokens) {
