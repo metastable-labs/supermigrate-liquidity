@@ -326,15 +326,11 @@ contract ForkTest is Test {
         console.log("amountAIn: %e", amountA);
         console.log("amountBIn: %e", amountB);
 
-        uint256 aDecMultiplier = 10 ** (18 - IERC20Metadata(params.l2TokenA).decimals());
-        uint256 bDecMultiplier = 10 ** (18 - IERC20Metadata(params.l2TokenB).decimals());
-
         uint256 valueIn;
         uint256 valueOut;
 
         uint256 amountA_converted = IPool(address(base_pool)).getAmountOut(amountA, params.l2TokenA);
         uint256 amountAOut_converted = IPool(address(base_pool)).getAmountOut(amountAOut, params.l2TokenA);
-
 
         valueIn = amountA_converted + amountB;
         valueOut = amountAOut_converted + amountBOut;

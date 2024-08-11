@@ -13,7 +13,7 @@ import {IPool} from "@aerodrome/contracts/contracts/interfaces/IPool.sol";
 import {IGauge} from "@aerodrome/contracts/contracts/interfaces/IGauge.sol";
 import {OApp, MessagingFee, Origin} from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/OApp.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import { Babylonian } from "../lib/Babylonian.sol";
+import {Babylonian} from "../lib/Babylonian.sol";
 
 /**
  * @title L2LiquidityManager
@@ -342,15 +342,17 @@ contract L2LiquidityManager is OApp {
         if (!sellTokenA) { // Sell token B
             tokensToSell = _calculateAmountIn(y, x, b, a, bDecMultiplier, aDecMultiplier) / bDecMultiplier;
 
-            // TODO: optimise this (calculate A_rec)
-            amountOutMin = tokensToSell * x * 98 / y / 100;
+            uint256 amtToReceive = _calculateAmountOut(tokensToSell, y, x);
+
+            amountOutMin = amtToReceive * 9999/10000; // allow for 1bip of error
         }
         else { // Sell token A
             tokensToSell = _calculateAmountIn(x, y, a, b, aDecMultiplier, bDecMultiplier);
             sellTokenA = true;
 
-            // TODO: optimise this (calculate B_rec)
-            amountOutMin = tokensToSell * y * 98 / x / 100;
+            uint256 amtToReceive = _calculateAmountOut(tokensToSell, y, x);
+
+            amountOutMin = amtToReceive * 9999/10000; // allow for 1bip of error
         }
         
         IRouter.Route[] memory routes = new IRouter.Route[](1);
@@ -377,7 +379,7 @@ contract L2LiquidityManager is OApp {
      * @param bDec 10 ** (18 - tokenB.decimals())
 
      */
-    function _calculateAmountIn(uint256 x, uint256 y, uint256 a, uint256 b, uint256 aDec, uint256 bDec) internal pure returns (uint256 s) {
+    function _calculateAmountIn(uint256 x, uint256 y, uint256 a, uint256 b, uint256 aDec, uint256 bDec) internal pure returns (uint256) {
         // Normalize to 18 decimals
         x = x * aDec;
         a = a * aDec;
@@ -400,10 +402,14 @@ contract L2LiquidityManager is OApp {
         // Compute the denominator
         uint256 denominator = 1994 * (y + b);
 
-        // Calculate the final value of s
+        // Calculate the final value of amountIn
+        uint256 amountIn = numerator * WAD / denominator;
 
-        s = numerator * WAD / denominator;
+        return amountIn;
+    }
 
+    function _calculateAmountOut(uint256 amountIn, uint256 reserveIn, uint256 reserveOut) internal pure returns(uint256) {
+        return reserveOut*997*amountIn / (1000*reserveIn + 997*amountIn);
     }
 
     /**
