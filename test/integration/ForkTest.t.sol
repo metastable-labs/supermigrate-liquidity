@@ -30,12 +30,8 @@ contract ForkTest is Test {
     ERC20 pool = ERC20(0xB4e16d0168e52d35CaCD2c6185b44281Ec28C9Dc);
 
     // BASE CONTRACTS
-    IUniswapV2Factory public constant base_uniswapV2Factory = IUniswapV2Factory(0x8909Dc15e40173Ff4699343b6eB8132c65e18eC6);
-    IUniswapRouter public constant base_uniswapV2Router = IUniswapRouter(0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24);
-    IUniswapV3Factory public constant base_uniswapV3Factory = IUniswapV3Factory(0x33128a8fC17869897dcE68Ed026d694621f6FDfD);
-    INonfungiblePositionManager public constant base_nonfungiblePositionManager 
-        = INonfungiblePositionManager(0x03a520b32C04BF3bEEf7BEb72E919cf822Ed34f1);
     address public constant base_gauge  = 0x519BBD1Dd8C6A94C46080E24f316c14Ee758C025;
+    address public constant aerodromeRouter = 0xcF77a3Ba9A5CA399B7c97c74d54e5b1Beb874E43;
 
     // BASE TOKENS
     ERC20 base_WETH = ERC20(0x4200000000000000000000000000000000000006);
@@ -43,12 +39,8 @@ contract ForkTest is Test {
     ERC20 base_USDC = ERC20(0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913);
     ERC20 base_pool = ERC20(0xcDAC0d6c6C59727a65F871236188350531885C43);
 
-
     address public constant endpointMainnet = 0x1a44076050125825900e736c501f859c50fE728c;
     address public constant endpointBase = 0x1a44076050125825900e736c501f859c50fE728c;
-
-    address public constant aerodromeRouter = 0xcF77a3Ba9A5CA399B7c97c74d54e5b1Beb874E43;
-
 
     address public delegate;
 
@@ -68,18 +60,12 @@ contract ForkTest is Test {
 
     uint256 ethPrice;
 
-    // Fail pair: (777460, 0x56a2b7581ABB55B500732871b77f4198d5f9AE58)
-    // Good pair: (777461, 0xc40BD4b12e8785aC3C570a071cC9A80940617310)
-    // Good pair: (777805, 0x7eF216afdF22D1B336169a0C4bB7b5a531d1E528) [SELL B]
-    // Good pair: (781034, 0x7350Dc1c9c0b154C851E81ae3Da3E99aA4D7B36b) [SELL A]
     function setUp() public {
 
         ///////////////
         // L2 SETUP////
         ///////////////
         baseFork = vm.createSelectFork(vm.envString("BASE_RPC"));
-
-
 
         delegate = makeAddr("delegate");
         feeReceiver = makeAddr("feeReceiver");
@@ -95,7 +81,6 @@ contract ForkTest is Test {
         uint256 b = uint256(r2);
         ethPrice = a * 1e12 * 1e18 / b;
 
-        
         user = makeAddr("user");
 
         liquidityMigration = new LiquidityMigration(
@@ -189,7 +174,10 @@ contract ForkTest is Test {
         vm.prank(endpointBase);
         l2LiquidityManager.lzReceive(origin, receipt.guid, messageSent, executor, "");
 
-        print_results(amountA, amountB, wethBefore, usdcBefore, liqBefore, params);
+        (uint256 valueIn, uint256 valueOut) = print_results(amountA, amountB, wethBefore, usdcBefore, liqBefore, params);
+
+        assertGt(valueOut, valueIn * (10000 - 50)/10000); // allowing 0.5%
+
     }
     function test_migrateV3Liquidity() public {
         uint256[] memory tokenIds = new uint256[](5);
@@ -281,10 +269,11 @@ contract ForkTest is Test {
         vm.prank(endpointBase);
         l2LiquidityManager.lzReceive(origin, receipt.guid, messageSent, executor, "");
 
-        print_results(amountA, amountB, wethBefore, usdcBefore, liqBefore, params);
+        (uint256 valueIn, uint256 valueOut) = print_results(amountA, amountB, wethBefore, usdcBefore, liqBefore, params);
         
-        // Calculated: a 0.237% loss of value
-        // Attribution: Migration fee (0.1%), Swap fee (0.3% of at most half of funds)
+        assertGt(valueOut, valueIn * (10000 - 50)/10000); // allowing 0.5%
+        // FEES:
+        // Migration fee (0.1%), Swap fee (0.3% of at most half of funds)
         // Worst case fees paid (If single sided, and swapping half of the liquidity) = 0.1% + 0.15% = 0.25%
     }
 
@@ -305,7 +294,7 @@ contract ForkTest is Test {
         uint256 usdcBefore, 
         uint256 liqBefore, 
         LiquidityMigration.MigrationParams memory params) 
-        internal view {
+        internal view returns(uint256, uint256){
         
         bool AisWeth = params.l2TokenA == address(base_WETH);
 
@@ -343,18 +332,17 @@ contract ForkTest is Test {
         uint256 valueIn;
         uint256 valueOut;
 
-        if (params.l2TokenA == address(base_USDC)) {
+        uint256 amountA_converted = IPool(address(base_pool)).getAmountOut(amountA, params.l2TokenA);
+        uint256 amountAOut_converted = IPool(address(base_pool)).getAmountOut(amountAOut, params.l2TokenA);
 
-            valueIn = amountA*aDecMultiplier + amountB*bDecMultiplier * ethPrice / 1e18;
-            valueOut = amountAOut*aDecMultiplier + amountBOut*bDecMultiplier * ethPrice / 1e18;
-        }
-        else {
-            valueIn = amountA*aDecMultiplier* ethPrice / 1e18 + amountB*bDecMultiplier;
-            valueOut = amountAOut*aDecMultiplier* ethPrice / 1e18 + amountBOut*bDecMultiplier;            
-        }
+
+        valueIn = amountA_converted + amountB;
+        valueOut = amountAOut_converted + amountBOut;
         
         console.log("valueIn: %e", valueIn);
         console.log("valueOut: %e", valueOut);
+
+        return (valueIn, valueOut);
     }
 
     function _getMigrationEventData(Vm.Log[] memory entries) internal pure returns (bytes memory){
@@ -606,4 +594,7 @@ interface IUniswapRouter {
 }
 interface IUniswapV2Pair {
     function getReserves() external view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast);
+}
+interface IPool {
+    function getAmountOut(uint256 amountIn, address tokenIn) external view returns (uint256);
 }
