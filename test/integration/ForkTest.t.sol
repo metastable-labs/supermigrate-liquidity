@@ -2,6 +2,7 @@ import {Test, console} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
 import {L2LiquidityManager} from "../../src/modules/L2LiquidityManager.sol";
 import {LiquidityMigration} from "../../src/LiquidityMigration.sol";
@@ -9,14 +10,14 @@ import {OptionsBuilder} from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/libs/
 
 import {Origin} from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/OApp.sol";
 import {MessagingReceipt} from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/OAppSender.sol";
-
+import {IRouter} from "@aerodrome/contracts/contracts/interfaces/IRouter.sol";
 
 contract ForkTest is Test {
     using OptionsBuilder for bytes;
 
     // ETH CONTRACTS
     IUniswapV2Factory public constant uniswapV2Factory = IUniswapV2Factory(0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f);
-    IRouter public constant uniswapV2Router = IRouter(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
+    IUniswapRouter public constant uniswapV2Router = IUniswapRouter(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
     IUniswapV3Factory public constant uniswapV3Factory = IUniswapV3Factory(0x1F98431c8aD98523631AE4a59f267346ea31F984);
     INonfungiblePositionManager public constant nonfungiblePositionManager 
         = INonfungiblePositionManager(0xC36442b4a4522E871399CD717aBDD847Ab11FE88);
@@ -30,7 +31,7 @@ contract ForkTest is Test {
 
     // BASE CONTRACTS
     IUniswapV2Factory public constant base_uniswapV2Factory = IUniswapV2Factory(0x8909Dc15e40173Ff4699343b6eB8132c65e18eC6);
-    IRouter public constant base_uniswapV2Router = IRouter(0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24);
+    IUniswapRouter public constant base_uniswapV2Router = IUniswapRouter(0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24);
     IUniswapV3Factory public constant base_uniswapV3Factory = IUniswapV3Factory(0x33128a8fC17869897dcE68Ed026d694621f6FDfD);
     INonfungiblePositionManager public constant base_nonfungiblePositionManager 
         = INonfungiblePositionManager(0x03a520b32C04BF3bEEf7BEb72E919cf822Ed34f1);
@@ -65,12 +66,19 @@ contract ForkTest is Test {
 
     uint256 public constant MIGRATION_FEE = 10; // 0.1%
 
+    uint256 ethPrice;
+
+    // Fail pair: (777460, 0x56a2b7581ABB55B500732871b77f4198d5f9AE58)
+    // Good pair: (777461, 0xc40BD4b12e8785aC3C570a071cC9A80940617310)
+    // Good pair: (777805, 0x7eF216afdF22D1B336169a0C4bB7b5a531d1E528) [SELL B]
+    // Good pair: (781034, 0x7350Dc1c9c0b154C851E81ae3Da3E99aA4D7B36b) [SELL A]
     function setUp() public {
 
         ///////////////
         // L2 SETUP////
         ///////////////
         baseFork = vm.createSelectFork(vm.envString("BASE_RPC"));
+
 
 
         delegate = makeAddr("delegate");
@@ -82,6 +90,10 @@ contract ForkTest is Test {
         // L1 SETUP////
         ///////////////
         ethFork = vm.createSelectFork(vm.envString("ETH_RPC"));
+        (uint112 r1, uint112 r2,) = IUniswapV2Pair(0xB4e16d0168e52d35CaCD2c6185b44281Ec28C9Dc).getReserves();
+        uint256 a = uint256(r1);
+        uint256 b = uint256(r2);
+        ethPrice = a * 1e12 * 1e18 / b;
 
         
         user = makeAddr("user");
@@ -110,14 +122,10 @@ contract ForkTest is Test {
         l2LiquidityManager.setPool(address(base_USDC), address(base_WETH), address(base_pool), base_gauge);
         vm.stopPrank();
 
-
-
-
-
         vm.label(address(l2LiquidityManager), "l2LiquidityManager");
         vm.label(user, "user");
     }
-    // Token pair used in testing: WETH/USDC
+
     function test_migrateV2Liquidity() public {
         vm.selectFork(ethFork);
         deal(address(WETH), user, 10e18);
@@ -150,13 +158,14 @@ contract ForkTest is Test {
             .addExecutorLzReceiveOption(200000, 0)
             .addExecutorLzComposeOption(0, 500000, 0);
 
+        //(uint256 tokenFee, ) = liquidityMigration.quote(BASE_EID);
         vm.recordLogs();
         MessagingReceipt memory receipt = liquidityMigration.migrateERC20Liquidity{value: 0.1 ether}(params, options);
         vm.stopPrank();
 
         Vm.Log[] memory entries = vm.getRecordedLogs();
         // can make this more robust if needed
-        (,,uint256 amountA, uint256 amountB) = abi.decode(entries[8].data, (address, address, uint256, uint256));
+        (,,uint256 amountA, uint256 amountB) = abi.decode(_getMigrationEventData(entries), (address, address, uint256, uint256));
 
         bytes memory messageSent = abi.encode(
             params.l2TokenA, params.l2TokenB, amountA, amountB, user, params.poolType, params.stakeLPtokens
@@ -172,9 +181,111 @@ contract ForkTest is Test {
         address executor = makeAddr("executor");
 
         Origin memory origin = Origin(ETH_EID, bytes32(uint256(uint160(address(liquidityMigration)))), receipt.nonce);
-        vm.prank(endpointBase);
 
+        uint256 wethBefore = base_WETH.balanceOf(user);
+        uint256 usdcBefore = base_USDC.balanceOf(user);
+        uint256 liqBefore  = base_pool.balanceOf(user);
+
+        vm.prank(endpointBase);
         l2LiquidityManager.lzReceive(origin, receipt.guid, messageSent, executor, "");
+
+        print_results(amountA, amountB, wethBefore, usdcBefore, liqBefore, params);
+    }
+    function test_migrateV3Liquidity() public {
+        uint256[] memory tokenIds = new uint256[](5);
+
+        tokenIds[0] = 777460;
+        tokenIds[1] = 777461;
+        tokenIds[2] = 777805; // sell tokenB
+        tokenIds[3] = 781034; // sell tokenA
+        tokenIds[4] = 781470; // Single side
+        
+        for (uint i = 0; i < 5; i++) {
+            _migrateV3Liquidity(tokenIds[i]);
+        }
+    }
+
+    function _migrateV3Liquidity(uint256 tokenId) internal {
+        vm.selectFork(ethFork);
+        deal(address(WETH), user, 10e18);
+        deal(address(USDC), user, 25_000e6);
+        deal(user, 20 ether);
+        
+        // Transfer position from `owner` to `user`
+        address owner = nonfungiblePositionManager.ownerOf(tokenId);
+        vm.startPrank(owner);
+        INonfungiblePositionManager.CollectParams memory collectParams = INonfungiblePositionManager.CollectParams({
+            tokenId: tokenId,
+            recipient: owner,
+            amount0Max: type(uint128).max,
+            amount1Max: type(uint128).max
+        });
+
+        // Collect fees so out-of-range positions become single sided
+        nonfungiblePositionManager.collect(collectParams);
+        nonfungiblePositionManager.safeTransferFrom(owner, user, tokenId);
+        vm.stopPrank();
+
+        vm.startPrank(user);
+        nonfungiblePositionManager.approve(address(liquidityMigration), tokenId);
+        
+        LiquidityMigration.MigrationParams memory params = LiquidityMigration.MigrationParams({
+            dstEid: BASE_EID,
+            tokenA: address(WETH),
+            tokenB: address(USDC),
+            l2TokenA: address(base_WETH),
+            l2TokenB: address(base_USDC),
+            liquidity: 0,
+            tokenId: tokenId,
+            amountAMin: 0,       
+            amountBMin: 0,  
+            deadline: block.timestamp,
+            minGasLimit: 50_000,
+            poolType: LiquidityMigration.PoolType(0),
+            stakeLPtokens: false
+        });
+
+        // Example options
+        bytes memory options = OptionsBuilder
+            .newOptions()
+            .addExecutorLzReceiveOption(200000, 0)
+            .addExecutorLzComposeOption(0, 500000, 0);
+
+        //(uint256 tokenFee, ) = liquidityMigration.quote(BASE_EID);
+        vm.recordLogs();
+        MessagingReceipt memory receipt = liquidityMigration.migrateERC20Liquidity{value: 0.1 ether}(params, options);
+        vm.stopPrank();
+
+        Vm.Log[] memory entries = vm.getRecordedLogs();
+        (,,uint256 amountA, uint256 amountB) = abi.decode(_getMigrationEventData(entries), (address, address, uint256, uint256));
+
+        bytes memory messageSent = abi.encode(
+            params.l2TokenA, params.l2TokenB, amountA, amountB, user, params.poolType, params.stakeLPtokens
+        );
+
+        // Now switch to Base
+        vm.selectFork(baseFork);
+        
+        // Simulate bridged tokens
+        deal(params.l2TokenA, address(l2LiquidityManager), amountA);
+        deal(params.l2TokenB, address(l2LiquidityManager), amountB);
+
+        address executor = makeAddr("executor");
+
+        Origin memory origin = Origin(ETH_EID, bytes32(uint256(uint160(address(liquidityMigration)))), receipt.nonce);
+
+        uint256 liqBefore = base_pool.balanceOf(user);
+        uint256 wethBefore = base_WETH.balanceOf(user);
+        uint256 usdcBefore = base_USDC.balanceOf(user);
+
+        vm.prank(endpointBase);
+        l2LiquidityManager.lzReceive(origin, receipt.guid, messageSent, executor, "");
+
+        print_results(amountA, amountB, wethBefore, usdcBefore, liqBefore, params);
+        
+        // Calculated: a 0.237% loss of value
+        // Attribution: Migration fee (0.1%), Swap fee (0.3% of at most half of funds)
+        // Worst case fees paid (If single sided, and swapping half of the liquidity) = 0.1% + 0.15% = 0.25%
     }
 
     function _addV2Liquidity(address _user) internal returns(uint256 lpTokens) {
@@ -185,6 +296,74 @@ contract ForkTest is Test {
         uniswapV2Router.addLiquidity(address(WETH), address(USDC), 1e18, 2_500e6, 0, 0, _user, block.timestamp);
 
         lpTokens = pool.balanceOf(_user);
+    }
+
+    function print_results(
+        uint256 amountA,
+        uint256 amountB,
+        uint256 wethBefore,
+        uint256 usdcBefore, 
+        uint256 liqBefore, 
+        LiquidityMigration.MigrationParams memory params) 
+        internal view {
+        
+        bool AisWeth = params.l2TokenA == address(base_WETH);
+
+        uint256 liquidityProvided = base_pool.balanceOf(user) - liqBefore;
+
+        uint256 usdcGain = base_USDC.balanceOf(user) - usdcBefore;
+        uint256 wethGain = base_WETH.balanceOf(user) - wethBefore;
+
+        (uint256 amountAOut, uint256 amountBOut) = IRouter(aerodromeRouter).quoteRemoveLiquidity(
+            params.l2TokenA, 
+            params.l2TokenB, 
+            false, 
+            IRouter(aerodromeRouter).defaultFactory(), 
+            liquidityProvided
+        );
+
+        if (AisWeth) {
+            amountAOut += wethGain;
+            amountBOut += usdcGain;
+        }
+        else {
+            amountAOut += usdcGain;
+            amountBOut += wethGain;
+        }
+
+        console.log("amountAOut: %e", amountAOut);
+        console.log("amountBOut: %e", amountBOut);
+
+        console.log("amountAIn: %e", amountA);
+        console.log("amountBIn: %e", amountB);
+
+        uint256 aDecMultiplier = 10 ** (18 - IERC20Metadata(params.l2TokenA).decimals());
+        uint256 bDecMultiplier = 10 ** (18 - IERC20Metadata(params.l2TokenB).decimals());
+
+        uint256 valueIn;
+        uint256 valueOut;
+
+        if (params.l2TokenA == address(base_USDC)) {
+
+            valueIn = amountA*aDecMultiplier + amountB*bDecMultiplier * ethPrice / 1e18;
+            valueOut = amountAOut*aDecMultiplier + amountBOut*bDecMultiplier * ethPrice / 1e18;
+        }
+        else {
+            valueIn = amountA*aDecMultiplier* ethPrice / 1e18 + amountB*bDecMultiplier;
+            valueOut = amountAOut*aDecMultiplier* ethPrice / 1e18 + amountBOut*bDecMultiplier;            
+        }
+        
+        console.log("valueIn: %e", valueIn);
+        console.log("valueOut: %e", valueOut);
+    }
+
+    function _getMigrationEventData(Vm.Log[] memory entries) internal pure returns (bytes memory){
+        uint256 length = entries.length;
+        for (uint256 i = 0; i < length; i++) {
+            if (entries[i].topics[0] == LiquidityMigration.LiquidityRemoved.selector) {
+                return entries[i].data;
+            }
+        }
     }
 }
 
@@ -237,6 +416,7 @@ interface INonfungiblePositionManager {
         uint128 amount0Max;
         uint128 amount1Max;
     }
+    function approve(address to, uint256 tokenId) external;
 
     function positions(uint256 tokenId)
         external
@@ -276,6 +456,8 @@ interface INonfungiblePositionManager {
     function burn(uint256 tokenId) external payable;
 
     function safeTransferFrom(address from, address to, uint256 tokenId) external;
+
+    function ownerOf(uint256 tokenId) external returns (address);
 }
 
 interface StandardBridge {
@@ -329,7 +511,7 @@ interface StandardBridge {
     function OTHER_BRIDGE() external view returns (address);
 }
 
-interface IRouter {
+interface IUniswapRouter {
     function factory() external pure returns (address);
     function WETH() external pure returns (address);
 
@@ -421,4 +603,7 @@ interface IRouter {
     function getAmountIn(uint amountOut, uint reserveIn, uint reserveOut) external pure returns (uint amountIn);
     function getAmountsOut(uint amountIn, address[] calldata path) external view returns (uint[] memory amounts);
     function getAmountsIn(uint amountOut, address[] calldata path) external view returns (uint[] memory amounts);
+}
+interface IUniswapV2Pair {
+    function getReserves() external view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast);
 }
