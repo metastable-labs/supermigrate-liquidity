@@ -338,7 +338,7 @@ contract L2LiquidityManager is OApp {
         else {
             sellTokenA = mulDiv(a, RAY, b) > mulDiv(x, RAY, y); // our ratio of A:B is greater than the pool ratio
         }
-        
+   
         if (!sellTokenA) { // Sell token B
             tokensToSell = _calculateAmountIn(y, x, b, a, bDecMultiplier, aDecMultiplier) / bDecMultiplier;
 
@@ -350,7 +350,7 @@ contract L2LiquidityManager is OApp {
             tokensToSell = _calculateAmountIn(x, y, a, b, aDecMultiplier, bDecMultiplier);
             sellTokenA = true;
 
-            uint256 amtToReceive = _calculateAmountOut(tokensToSell, y, x);
+            uint256 amtToReceive = _calculateAmountOut(tokensToSell, x, y);
 
             amountOutMin = amtToReceive * 9999/10000; // allow for 1bip of error
         }
@@ -478,39 +478,6 @@ contract L2LiquidityManager is OApp {
         IGauge(poolData.gaugeAddress).deposit(amount, owner);
         userStakedLPTokens[owner][poolData.poolAddress] += amount;
         emit LPTokensStaked(owner, poolData.poolAddress, poolData.gaugeAddress, amount);
-    }
-
-    /**
-     * @notice Unstakes LP tokens for a user
-     * @dev This function allows users to withdraw their staked LP tokens
-     * @param amount Amount of LP tokens to unstake
-     * @param tokenA Address of the first token in the pair
-     * @param tokenB Address of the second token in the pair
-     */
-    function unstakeLPToken(uint256 amount, address tokenA, address tokenB) external {
-        PoolData memory poolData = tokenPairToPools[tokenA][tokenB];
-        require(poolData.poolAddress != address(0), "Pool does not exist");
-
-        require(userStakedLPTokens[msg.sender][poolData.poolAddress] >= amount, "Insufficient staked LP tokens");
-
-        IGauge(poolData.gaugeAddress).withdraw(amount);
-        userStakedLPTokens[msg.sender][poolData.poolAddress] -= amount;
-
-        emit LPTokensWithdrawn(msg.sender, poolData.poolAddress, amount);
-    }
-
-    /**
-     * @notice Claims Aero rewards for a user
-     * @dev This function allows users to claim their accumulated Aero rewards
-     * @param owner Address of the user claiming rewards
-     * @param tokenA Address of the first token in the pair
-     * @param tokenB Address of the second token in the pair
-     */
-    function claimAeroRewards(address owner, address tokenA, address tokenB) external {
-        PoolData memory poolData = tokenPairToPools[tokenA][tokenB];
-
-        IGauge(poolData.gaugeAddress).getReward(owner);
-        emit AeroEmissionsClaimed(owner, poolData.poolAddress, poolData.gaugeAddress);
     }
 
     /**
