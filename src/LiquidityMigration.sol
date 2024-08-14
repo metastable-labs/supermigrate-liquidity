@@ -54,6 +54,7 @@ contract LiquidityMigration is OApp {
         uint32 minGasLimit;
         PoolType poolType;
         bool stakeLPtokens;
+        uint128 liquidityToRemove; // for V3 partial liquidity removal
     }
 
     /**
@@ -123,7 +124,13 @@ contract LiquidityMigration is OApp {
     function _removeLiquidity(MigrationParams memory params) internal returns (uint256 amountA, uint256 amountB) {
         if (isV3Pool(params.tokenA, params.tokenB) && params.tokenId != 0) {
             return _removeV3Liquidity(
-                params.tokenA, params.tokenB, params.tokenId, params.amountAMin, params.amountBMin, params.deadline
+                params.tokenA,
+                params.tokenB,
+                params.liquidityToRemove,
+                params.tokenId,
+                params.amountAMin,
+                params.amountBMin,
+                params.deadline
             );
         } else {
             return _removeV2Liquidity(
@@ -234,6 +241,7 @@ contract LiquidityMigration is OApp {
      * @param tokenA Address of token A in the pair
      * @param tokenB Address of token B in the pair
      * @param tokenId ID of the NFT representing the liquidity position
+     * @param liquidityToRemove amount of liquidity to remove partially
      * @param amountAMin Minimum amount of token A to receive
      * @param amountBMin Minimum amount of token B to receive
      * @param deadline Deadline for the transaction
@@ -243,6 +251,7 @@ contract LiquidityMigration is OApp {
     function _removeV3Liquidity(
         address tokenA,
         address tokenB,
+        uint128 liquidityToRemove,
         uint256 tokenId,
         uint256 amountAMin,
         uint256 amountBMin,
@@ -255,6 +264,8 @@ contract LiquidityMigration is OApp {
             "Invalid token pair for position"
         );
 
+        require(liquidityToRemove <= liquidity, "Insufficient liquidity");
+
         // Transfer the NFT to this contract
         nonfungiblePositionManager.safeTransferFrom(msg.sender, address(this), tokenId);
 
@@ -262,7 +273,7 @@ contract LiquidityMigration is OApp {
         INonfungiblePositionManager.DecreaseLiquidityParams memory params = INonfungiblePositionManager
             .DecreaseLiquidityParams({
             tokenId: tokenId,
-            liquidity: liquidity,
+            liquidity: liquidityToRemove,
             amount0Min: 0,
             amount1Min: 0,
             deadline: deadline
@@ -283,7 +294,13 @@ contract LiquidityMigration is OApp {
         // Check minimum amounts
         require(amount0 >= amountAMin && amount1 >= amountBMin, "Slippage check failed");
 
-        nonfungiblePositionManager.burn(tokenId);
+        // If all liquidity is removed, burn the position
+        if (liquidityToRemove == liquidity) {
+            nonfungiblePositionManager.burn(tokenId);
+        } else {
+            // Transfer the NFT back to the user
+            nonfungiblePositionManager.safeTransferFrom(address(this), msg.sender, tokenId);
+        }
 
         return token0 == tokenA ? (amount0, amount1) : (amount1, amount0);
     }
@@ -305,7 +322,7 @@ contract LiquidityMigration is OApp {
     ) internal {
         IERC20(localToken).approve(address(l1StandardBridge), amount);
         l1StandardBridge.bridgeERC20To(localToken, l2Token, l2LiquidityManager, amount, minGasLimit, extraData);
-        
+
         emit TokensBridged(l2Token, amount);
     }
 

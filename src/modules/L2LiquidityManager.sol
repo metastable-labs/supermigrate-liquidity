@@ -227,9 +227,8 @@ contract L2LiquidityManager is OApp {
     ) internal returns (uint256) {
         PoolData memory poolData = tokenPairToPools[tokenA][tokenB];
         require(poolData.poolAddress != address(0), "Pool does not exist");
-            
-        uint256 liquidity =
-            _depositLiquidityERC20(tokenA, tokenB, amountA, amountB, poolType, user);
+
+        uint256 liquidity = _depositLiquidityERC20(tokenA, tokenB, amountA, amountB, poolType, user);
         return liquidity;
     }
 
@@ -252,7 +251,6 @@ contract L2LiquidityManager is OApp {
         PoolType poolType,
         address user
     ) private returns (uint256) {
-        
         bool stable = (poolType == PoolType.STABLE);
 
         amountA = deductFee(tokenA, amountA);
@@ -266,13 +264,12 @@ contract L2LiquidityManager is OApp {
             if (sellTokenA) {
                 amountA -= amounts[0];
                 amountB += amounts[1];
-            }
-            else {
+            } else {
                 amountB -= amounts[0];
                 amountA += amounts[1];
             }
         }
-        
+
         IERC20(tokenA).approve(address(aerodromeRouter), amountA);
         IERC20(tokenB).approve(address(aerodromeRouter), amountB);
 
@@ -281,15 +278,7 @@ contract L2LiquidityManager is OApp {
         uint256 amountBMin = mulDiv(amountB, FEE_DENOMINATOR - LIQ_SLIPPAGE, FEE_DENOMINATOR);
 
         (uint256 amountAOut, uint256 amountBOut, uint256 liquidity) = aerodromeRouter.addLiquidity(
-            tokenA,
-            tokenB,
-            stable,
-            amountA,
-            amountB,
-            amountAMin,
-            amountBMin,
-            address(this),
-            block.timestamp
+            tokenA, tokenB, stable, amountA, amountB, amountAMin, amountBMin, address(this), block.timestamp
         );
 
         uint256 leftoverA = amountA - amountAOut;
@@ -311,7 +300,10 @@ contract L2LiquidityManager is OApp {
         return liquidity;
     }
 
-    function _balanceTokenRatio(address tokenA, address tokenB, uint256 amountA, uint256 amountB) internal returns(uint256[] memory, bool) {
+    function _balanceTokenRatio(address tokenA, address tokenB, uint256 amountA, uint256 amountB)
+        internal
+        returns (uint256[] memory, bool)
+    {
         bool stable = false;
 
         uint256 aDecMultiplier = 10 ** (18 - IERC20Metadata(tokenA).decimals());
@@ -320,7 +312,8 @@ contract L2LiquidityManager is OApp {
         uint256 tokensToSell;
         uint256 amountOutMin;
 
-        (uint256 reserveA, uint256 reserveB) = aerodromeRouter.getReserves(tokenA, tokenB, stable, aerodromeRouter.defaultFactory());
+        (uint256 reserveA, uint256 reserveB) =
+            aerodromeRouter.getReserves(tokenA, tokenB, stable, aerodromeRouter.defaultFactory());
 
         uint256 x = (reserveA);
         uint256 y = (reserveB);
@@ -331,44 +324,41 @@ contract L2LiquidityManager is OApp {
 
         if (amountA == 0) {
             sellTokenA = false;
-        }
-        else if (amountB == 0) {
+        } else if (amountB == 0) {
             sellTokenA = true;
-        }
-        else {
+        } else {
             sellTokenA = mulDiv(a, RAY, b) > mulDiv(x, RAY, y); // our ratio of A:B is greater than the pool ratio
         }
-   
-        if (!sellTokenA) { // Sell token B
+
+        if (!sellTokenA) {
+            // Sell token B
             tokensToSell = _calculateAmountIn(y, x, b, a, bDecMultiplier, aDecMultiplier) / bDecMultiplier;
 
             uint256 amtToReceive = _calculateAmountOut(tokensToSell, y, x);
 
-            amountOutMin = amtToReceive * 9999/10000; // allow for 1bip of error
-        }
-        else { // Sell token A
+            amountOutMin = amtToReceive * 9999 / 10_000; // allow for 1bip of error
+        } else {
+            // Sell token A
             tokensToSell = _calculateAmountIn(x, y, a, b, aDecMultiplier, bDecMultiplier);
             sellTokenA = true;
 
             uint256 amtToReceive = _calculateAmountOut(tokensToSell, x, y);
 
-            amountOutMin = amtToReceive * 9999/10000; // allow for 1bip of error
+            amountOutMin = amtToReceive * 9999 / 10_000; // allow for 1bip of error
         }
-        
+
         IRouter.Route[] memory routes = new IRouter.Route[](1);
         routes[0] = IRouter.Route(
-            sellTokenA ? tokenA : tokenB, 
-            sellTokenA ? tokenB : tokenA, 
-            stable, 
-            aerodromeRouter.defaultFactory()
+            sellTokenA ? tokenA : tokenB, sellTokenA ? tokenB : tokenA, stable, aerodromeRouter.defaultFactory()
         );
 
         IERC20(sellTokenA ? tokenA : tokenB).approve(address(aerodromeRouter), tokensToSell);
 
-        uint256[] memory amounts = aerodromeRouter.swapExactTokensForTokens(tokensToSell, amountOutMin, routes, address(this), block.timestamp);
+        uint256[] memory amounts =
+            aerodromeRouter.swapExactTokensForTokens(tokensToSell, amountOutMin, routes, address(this), block.timestamp);
         return (amounts, sellTokenA);
     }
-    
+
     /**
      * @notice Calculates the exact amount of tokens to swap to achieve the pool ratio
      * @param x Pool reserves of the token to sell
@@ -377,9 +367,12 @@ contract L2LiquidityManager is OApp {
      * @param b User's amount of the token to buy
      * @param aDec 10 ** (18 - tokenA.decimals())
      * @param bDec 10 ** (18 - tokenB.decimals())
-
      */
-    function _calculateAmountIn(uint256 x, uint256 y, uint256 a, uint256 b, uint256 aDec, uint256 bDec) internal pure returns (uint256) {
+    function _calculateAmountIn(uint256 x, uint256 y, uint256 a, uint256 b, uint256 aDec, uint256 bDec)
+        internal
+        pure
+        returns (uint256)
+    {
         // Normalize to 18 decimals
         x = x * aDec;
         a = a * aDec;
@@ -393,7 +386,7 @@ contract L2LiquidityManager is OApp {
         uint256 ay = y * a / WAD;
 
         // Compute the square root term
-        uint256 innerTerm = (xy + bx) * (3988009 * xy + 9 * bx + 3988000 * ay);
+        uint256 innerTerm = (xy + bx) * (3_988_009 * xy + 9 * bx + 3_988_000 * ay);
         uint256 sqrtTerm = Babylonian.sqrt(innerTerm);
 
         // Compute the numerator
@@ -408,8 +401,12 @@ contract L2LiquidityManager is OApp {
         return amountIn;
     }
 
-    function _calculateAmountOut(uint256 amountIn, uint256 reserveIn, uint256 reserveOut) internal pure returns(uint256) {
-        return reserveOut*997*amountIn / (1000*reserveIn + 997*amountIn);
+    function _calculateAmountOut(uint256 amountIn, uint256 reserveIn, uint256 reserveOut)
+        internal
+        pure
+        returns (uint256)
+    {
+        return reserveOut * 997 * amountIn / (1000 * reserveIn + 997 * amountIn);
     }
 
     /**

@@ -19,10 +19,9 @@ contract ForkTest is Test {
     IUniswapV2Factory public constant uniswapV2Factory = IUniswapV2Factory(0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f);
     IUniswapRouter public constant uniswapV2Router = IUniswapRouter(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
     IUniswapV3Factory public constant uniswapV3Factory = IUniswapV3Factory(0x1F98431c8aD98523631AE4a59f267346ea31F984);
-    INonfungiblePositionManager public constant nonfungiblePositionManager 
-        = INonfungiblePositionManager(0xC36442b4a4522E871399CD717aBDD847Ab11FE88);
-    StandardBridge public constant l1StandardBridge 
-        = StandardBridge(0x3154Cf16ccdb4C6d922629664174b904d80F2C35); // base l1 standard bridge
+    INonfungiblePositionManager public constant nonfungiblePositionManager =
+        INonfungiblePositionManager(0xC36442b4a4522E871399CD717aBDD847Ab11FE88);
+    StandardBridge public constant l1StandardBridge = StandardBridge(0x3154Cf16ccdb4C6d922629664174b904d80F2C35); // base l1 standard bridge
 
     // ETH TOKENS
     ERC20 WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
@@ -30,7 +29,7 @@ contract ForkTest is Test {
     ERC20 pool = ERC20(0xB4e16d0168e52d35CaCD2c6185b44281Ec28C9Dc);
 
     // BASE CONTRACTS
-    address public constant base_gauge  = 0x519BBD1Dd8C6A94C46080E24f316c14Ee758C025;
+    address public constant base_gauge = 0x519BBD1Dd8C6A94C46080E24f316c14Ee758C025;
     address public constant aerodromeRouter = 0xcF77a3Ba9A5CA399B7c97c74d54e5b1Beb874E43;
 
     // BASE TOKENS
@@ -50,8 +49,8 @@ contract ForkTest is Test {
     address user;
     address feeReceiver;
 
-    uint32 public constant ETH_EID = 30101;
-    uint32 public constant BASE_EID = 30184;
+    uint32 public constant ETH_EID = 30_101;
+    uint32 public constant BASE_EID = 30_184;
 
     uint256 ethFork;
     uint256 baseFork;
@@ -61,7 +60,6 @@ contract ForkTest is Test {
     uint256 ethPrice;
 
     function setUp() public {
-
         ///////////////
         // L2 SETUP////
         ///////////////
@@ -69,7 +67,7 @@ contract ForkTest is Test {
 
         delegate = makeAddr("delegate");
         feeReceiver = makeAddr("feeReceiver");
-        
+
         l2LiquidityManager = new L2LiquidityManager(aerodromeRouter, feeReceiver, MIGRATION_FEE, endpointBase, delegate);
 
         ///////////////
@@ -84,23 +82,22 @@ contract ForkTest is Test {
         user = makeAddr("user");
 
         liquidityMigration = new LiquidityMigration(
-            endpointMainnet, 
-            delegate, 
-            address(uniswapV2Factory), 
-            address(uniswapV2Router), 
-            address(uniswapV3Factory), 
-            address(nonfungiblePositionManager), 
-            address(l1StandardBridge), 
+            endpointMainnet,
+            delegate,
+            address(uniswapV2Factory),
+            address(uniswapV2Router),
+            address(uniswapV3Factory),
+            address(nonfungiblePositionManager),
+            address(l1StandardBridge),
             address(l2LiquidityManager)
         );
 
         vm.prank(delegate);
         liquidityMigration.setPeer(BASE_EID, bytes32(uint256(uint160(address(l2LiquidityManager)))));
 
-
         ////////////////
         // L2 CONFIG////
-        //////////////// 
+        ////////////////
         vm.selectFork(baseFork);
         vm.startPrank(delegate);
         l2LiquidityManager.setPeer(ETH_EID, bytes32(uint256(uint160(address(liquidityMigration)))));
@@ -116,11 +113,11 @@ contract ForkTest is Test {
         deal(address(WETH), user, 10e18);
         deal(address(USDC), user, 25_000e6);
         deal(user, 20 ether);
-        
+
         uint256 lpTokens = _addV2Liquidity(user);
 
         pool.approve(address(liquidityMigration), pool.balanceOf(user));
-        
+
         LiquidityMigration.MigrationParams memory params = LiquidityMigration.MigrationParams({
             dstEid: BASE_EID,
             tokenA: address(WETH),
@@ -129,8 +126,8 @@ contract ForkTest is Test {
             l2TokenB: address(base_USDC),
             liquidity: lpTokens,
             tokenId: 0,
-            amountAMin: 0,       
-            amountBMin: 0,  
+            amountAMin: 0,
+            amountBMin: 0,
             deadline: block.timestamp,
             minGasLimit: 50_000,
             poolType: LiquidityMigration.PoolType(0),
@@ -138,10 +135,8 @@ contract ForkTest is Test {
         });
 
         // Example options
-        bytes memory options = OptionsBuilder
-            .newOptions()
-            .addExecutorLzReceiveOption(200000, 0)
-            .addExecutorLzComposeOption(0, 500000, 0);
+        bytes memory options =
+            OptionsBuilder.newOptions().addExecutorLzReceiveOption(200_000, 0).addExecutorLzComposeOption(0, 500_000, 0);
 
         //(uint256 tokenFee, ) = liquidityMigration.quote(BASE_EID);
         vm.recordLogs();
@@ -150,15 +145,15 @@ contract ForkTest is Test {
 
         Vm.Log[] memory entries = vm.getRecordedLogs();
         // can make this more robust if needed
-        (,,uint256 amountA, uint256 amountB) = abi.decode(_getMigrationEventData(entries), (address, address, uint256, uint256));
+        (,, uint256 amountA, uint256 amountB) =
+            abi.decode(_getMigrationEventData(entries), (address, address, uint256, uint256));
 
-        bytes memory messageSent = abi.encode(
-            params.l2TokenA, params.l2TokenB, amountA, amountB, user, params.poolType, params.stakeLPtokens
-        );
+        bytes memory messageSent =
+            abi.encode(params.l2TokenA, params.l2TokenB, amountA, amountB, user, params.poolType, params.stakeLPtokens);
 
         // Now switch to Base
         vm.selectFork(baseFork);
-        
+
         // Simulate bridged tokens
         deal(params.l2TokenA, address(l2LiquidityManager), amountA);
         deal(params.l2TokenB, address(l2LiquidityManager), amountB);
@@ -169,26 +164,26 @@ contract ForkTest is Test {
 
         uint256 wethBefore = base_WETH.balanceOf(user);
         uint256 usdcBefore = base_USDC.balanceOf(user);
-        uint256 liqBefore  = base_pool.balanceOf(user);
+        uint256 liqBefore = base_pool.balanceOf(user);
 
         vm.prank(endpointBase);
         l2LiquidityManager.lzReceive(origin, receipt.guid, messageSent, executor, "");
 
         (uint256 valueIn, uint256 valueOut) = print_results(amountA, amountB, wethBefore, usdcBefore, liqBefore, params);
 
-        assertGt(valueOut, valueIn * (10000 - 50)/10000); // allowing 0.5%
-
+        assertGt(valueOut, valueIn * (10_000 - 50) / 10_000); // allowing 0.5%
     }
+
     function test_migrateV3Liquidity() public {
         uint256[] memory tokenIds = new uint256[](5);
 
-        tokenIds[0] = 777460;
-        tokenIds[1] = 777461;
-        tokenIds[2] = 777805; // sell tokenB
-        tokenIds[3] = 781034; // sell tokenA
-        tokenIds[4] = 781470; // Single side
-        
-        for (uint i = 0; i < 5; i++) {
+        tokenIds[0] = 777_460;
+        tokenIds[1] = 777_461;
+        tokenIds[2] = 777_805; // sell tokenB
+        tokenIds[3] = 781_034; // sell tokenA
+        tokenIds[4] = 781_470; // Single side
+
+        for (uint256 i = 0; i < 5; i++) {
             _migrateV3Liquidity(tokenIds[i]);
         }
     }
@@ -198,7 +193,7 @@ contract ForkTest is Test {
         deal(address(WETH), user, 10e18);
         deal(address(USDC), user, 25_000e6);
         deal(user, 20 ether);
-        
+
         // Transfer position from `owner` to `user`
         address owner = nonfungiblePositionManager.ownerOf(tokenId);
         vm.startPrank(owner);
@@ -216,7 +211,7 @@ contract ForkTest is Test {
 
         vm.startPrank(user);
         nonfungiblePositionManager.approve(address(liquidityMigration), tokenId);
-        
+
         LiquidityMigration.MigrationParams memory params = LiquidityMigration.MigrationParams({
             dstEid: BASE_EID,
             tokenA: address(WETH),
@@ -225,8 +220,8 @@ contract ForkTest is Test {
             l2TokenB: address(base_USDC),
             liquidity: 0,
             tokenId: tokenId,
-            amountAMin: 0,       
-            amountBMin: 0,  
+            amountAMin: 0,
+            amountBMin: 0,
             deadline: block.timestamp,
             minGasLimit: 50_000,
             poolType: LiquidityMigration.PoolType(0),
@@ -234,10 +229,8 @@ contract ForkTest is Test {
         });
 
         // Example options
-        bytes memory options = OptionsBuilder
-            .newOptions()
-            .addExecutorLzReceiveOption(200000, 0)
-            .addExecutorLzComposeOption(0, 500000, 0);
+        bytes memory options =
+            OptionsBuilder.newOptions().addExecutorLzReceiveOption(200_000, 0).addExecutorLzComposeOption(0, 500_000, 0);
 
         //(uint256 tokenFee, ) = liquidityMigration.quote(BASE_EID);
         vm.recordLogs();
@@ -245,15 +238,15 @@ contract ForkTest is Test {
         vm.stopPrank();
 
         Vm.Log[] memory entries = vm.getRecordedLogs();
-        (,,uint256 amountA, uint256 amountB) = abi.decode(_getMigrationEventData(entries), (address, address, uint256, uint256));
+        (,, uint256 amountA, uint256 amountB) =
+            abi.decode(_getMigrationEventData(entries), (address, address, uint256, uint256));
 
-        bytes memory messageSent = abi.encode(
-            params.l2TokenA, params.l2TokenB, amountA, amountB, user, params.poolType, params.stakeLPtokens
-        );
+        bytes memory messageSent =
+            abi.encode(params.l2TokenA, params.l2TokenB, amountA, amountB, user, params.poolType, params.stakeLPtokens);
 
         // Now switch to Base
         vm.selectFork(baseFork);
-        
+
         // Simulate bridged tokens
         deal(params.l2TokenA, address(l2LiquidityManager), amountA);
         deal(params.l2TokenB, address(l2LiquidityManager), amountB);
@@ -270,19 +263,19 @@ contract ForkTest is Test {
         l2LiquidityManager.lzReceive(origin, receipt.guid, messageSent, executor, "");
 
         (uint256 valueIn, uint256 valueOut) = print_results(amountA, amountB, wethBefore, usdcBefore, liqBefore, params);
-        
-        assertGt(valueOut, valueIn * (10000 - 50)/10000); // allowing 0.5%
-        // FEES:
-        // Migration fee (0.1%), Swap fee (0.3% of at most half of funds)
-        // Worst case fees paid (If single sided, and swapping half of the liquidity) = 0.1% + 0.15% = 0.25%
+
+        assertGt(valueOut, valueIn * (10_000 - 50) / 10_000); // allowing 0.5%
+            // FEES:
+            // Migration fee (0.1%), Swap fee (0.3% of at most half of funds)
+            // Worst case fees paid (If single sided, and swapping half of the liquidity) = 0.1% + 0.15% = 0.25%
     }
 
-    function _addV2Liquidity(address _user) internal returns(uint256 lpTokens) {
+    function _addV2Liquidity(address _user) internal returns (uint256 lpTokens) {
         vm.startPrank(_user);
         WETH.approve(address(uniswapV2Router), type(uint256).max);
         USDC.approve(address(uniswapV2Router), type(uint256).max);
 
-        uniswapV2Router.addLiquidity(address(WETH), address(USDC), 1e18, 2_500e6, 0, 0, _user, block.timestamp);
+        uniswapV2Router.addLiquidity(address(WETH), address(USDC), 1e18, 2500e6, 0, 0, _user, block.timestamp);
 
         lpTokens = pool.balanceOf(_user);
     }
@@ -291,11 +284,10 @@ contract ForkTest is Test {
         uint256 amountA,
         uint256 amountB,
         uint256 wethBefore,
-        uint256 usdcBefore, 
-        uint256 liqBefore, 
-        LiquidityMigration.MigrationParams memory params) 
-        internal view returns(uint256, uint256){
-        
+        uint256 usdcBefore,
+        uint256 liqBefore,
+        LiquidityMigration.MigrationParams memory params
+    ) internal view returns (uint256, uint256) {
         bool AisWeth = params.l2TokenA == address(base_WETH);
 
         uint256 liquidityProvided = base_pool.balanceOf(user) - liqBefore;
@@ -304,18 +296,13 @@ contract ForkTest is Test {
         uint256 wethGain = base_WETH.balanceOf(user) - wethBefore;
 
         (uint256 amountAOut, uint256 amountBOut) = IRouter(aerodromeRouter).quoteRemoveLiquidity(
-            params.l2TokenA, 
-            params.l2TokenB, 
-            false, 
-            IRouter(aerodromeRouter).defaultFactory(), 
-            liquidityProvided
+            params.l2TokenA, params.l2TokenB, false, IRouter(aerodromeRouter).defaultFactory(), liquidityProvided
         );
 
         if (AisWeth) {
             amountAOut += wethGain;
             amountBOut += usdcGain;
-        }
-        else {
+        } else {
             amountAOut += usdcGain;
             amountBOut += wethGain;
         }
@@ -334,14 +321,14 @@ contract ForkTest is Test {
 
         valueIn = amountA_converted + amountB;
         valueOut = amountAOut_converted + amountBOut;
-        
+
         console.log("valueIn: %e", valueIn);
         console.log("valueOut: %e", valueOut);
 
         return (valueIn, valueOut);
     }
 
-    function _getMigrationEventData(Vm.Log[] memory entries) internal pure returns (bytes memory){
+    function _getMigrationEventData(Vm.Log[] memory entries) internal pure returns (bytes memory) {
         uint256 length = entries.length;
         for (uint256 i = 0; i < length; i++) {
             if (entries[i].topics[0] == LiquidityMigration.LiquidityRemoved.selector) {
@@ -400,6 +387,7 @@ interface INonfungiblePositionManager {
         uint128 amount0Max;
         uint128 amount1Max;
     }
+
     function approve(address to, uint256 tokenId) external;
 
     function positions(uint256 tokenId)
@@ -502,95 +490,123 @@ interface IUniswapRouter {
     function addLiquidity(
         address tokenA,
         address tokenB,
-        uint amountADesired,
-        uint amountBDesired,
-        uint amountAMin,
-        uint amountBMin,
+        uint256 amountADesired,
+        uint256 amountBDesired,
+        uint256 amountAMin,
+        uint256 amountBMin,
         address to,
-        uint deadline
-    ) external returns (uint amountA, uint amountB, uint liquidity);
+        uint256 deadline
+    ) external returns (uint256 amountA, uint256 amountB, uint256 liquidity);
     function addLiquidityETH(
         address token,
-        uint amountTokenDesired,
-        uint amountTokenMin,
-        uint amountETHMin,
+        uint256 amountTokenDesired,
+        uint256 amountTokenMin,
+        uint256 amountETHMin,
         address to,
-        uint deadline
-    ) external payable returns (uint amountToken, uint amountETH, uint liquidity);
+        uint256 deadline
+    ) external payable returns (uint256 amountToken, uint256 amountETH, uint256 liquidity);
     function removeLiquidity(
         address tokenA,
         address tokenB,
-        uint liquidity,
-        uint amountAMin,
-        uint amountBMin,
+        uint256 liquidity,
+        uint256 amountAMin,
+        uint256 amountBMin,
         address to,
-        uint deadline
-    ) external returns (uint amountA, uint amountB);
+        uint256 deadline
+    ) external returns (uint256 amountA, uint256 amountB);
     function removeLiquidityETH(
         address token,
-        uint liquidity,
-        uint amountTokenMin,
-        uint amountETHMin,
+        uint256 liquidity,
+        uint256 amountTokenMin,
+        uint256 amountETHMin,
         address to,
-        uint deadline
-    ) external returns (uint amountToken, uint amountETH);
+        uint256 deadline
+    ) external returns (uint256 amountToken, uint256 amountETH);
     function removeLiquidityWithPermit(
         address tokenA,
         address tokenB,
-        uint liquidity,
-        uint amountAMin,
-        uint amountBMin,
+        uint256 liquidity,
+        uint256 amountAMin,
+        uint256 amountBMin,
         address to,
-        uint deadline,
-        bool approveMax, uint8 v, bytes32 r, bytes32 s
-    ) external returns (uint amountA, uint amountB);
+        uint256 deadline,
+        bool approveMax,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external returns (uint256 amountA, uint256 amountB);
     function removeLiquidityETHWithPermit(
         address token,
-        uint liquidity,
-        uint amountTokenMin,
-        uint amountETHMin,
+        uint256 liquidity,
+        uint256 amountTokenMin,
+        uint256 amountETHMin,
         address to,
-        uint deadline,
-        bool approveMax, uint8 v, bytes32 r, bytes32 s
-    ) external returns (uint amountToken, uint amountETH);
+        uint256 deadline,
+        bool approveMax,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external returns (uint256 amountToken, uint256 amountETH);
     function swapExactTokensForTokens(
-        uint amountIn,
-        uint amountOutMin,
+        uint256 amountIn,
+        uint256 amountOutMin,
         address[] calldata path,
         address to,
-        uint deadline
-    ) external returns (uint[] memory amounts);
+        uint256 deadline
+    ) external returns (uint256[] memory amounts);
     function swapTokensForExactTokens(
-        uint amountOut,
-        uint amountInMax,
+        uint256 amountOut,
+        uint256 amountInMax,
         address[] calldata path,
         address to,
-        uint deadline
-    ) external returns (uint[] memory amounts);
-    function swapExactETHForTokens(uint amountOutMin, address[] calldata path, address to, uint deadline)
+        uint256 deadline
+    ) external returns (uint256[] memory amounts);
+    function swapExactETHForTokens(uint256 amountOutMin, address[] calldata path, address to, uint256 deadline)
         external
         payable
-        returns (uint[] memory amounts);
-    function swapTokensForExactETH(uint amountOut, uint amountInMax, address[] calldata path, address to, uint deadline)
-        external
-        returns (uint[] memory amounts);
-    function swapExactTokensForETH(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline)
-        external
-        returns (uint[] memory amounts);
-    function swapETHForExactTokens(uint amountOut, address[] calldata path, address to, uint deadline)
+        returns (uint256[] memory amounts);
+    function swapTokensForExactETH(
+        uint256 amountOut,
+        uint256 amountInMax,
+        address[] calldata path,
+        address to,
+        uint256 deadline
+    ) external returns (uint256[] memory amounts);
+    function swapExactTokensForETH(
+        uint256 amountIn,
+        uint256 amountOutMin,
+        address[] calldata path,
+        address to,
+        uint256 deadline
+    ) external returns (uint256[] memory amounts);
+    function swapETHForExactTokens(uint256 amountOut, address[] calldata path, address to, uint256 deadline)
         external
         payable
-        returns (uint[] memory amounts);
+        returns (uint256[] memory amounts);
 
-    function quote(uint amountA, uint reserveA, uint reserveB) external pure returns (uint amountB);
-    function getAmountOut(uint amountIn, uint reserveIn, uint reserveOut) external pure returns (uint amountOut);
-    function getAmountIn(uint amountOut, uint reserveIn, uint reserveOut) external pure returns (uint amountIn);
-    function getAmountsOut(uint amountIn, address[] calldata path) external view returns (uint[] memory amounts);
-    function getAmountsIn(uint amountOut, address[] calldata path) external view returns (uint[] memory amounts);
+    function quote(uint256 amountA, uint256 reserveA, uint256 reserveB) external pure returns (uint256 amountB);
+    function getAmountOut(uint256 amountIn, uint256 reserveIn, uint256 reserveOut)
+        external
+        pure
+        returns (uint256 amountOut);
+    function getAmountIn(uint256 amountOut, uint256 reserveIn, uint256 reserveOut)
+        external
+        pure
+        returns (uint256 amountIn);
+    function getAmountsOut(uint256 amountIn, address[] calldata path)
+        external
+        view
+        returns (uint256[] memory amounts);
+    function getAmountsIn(uint256 amountOut, address[] calldata path)
+        external
+        view
+        returns (uint256[] memory amounts);
 }
+
 interface IUniswapV2Pair {
     function getReserves() external view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast);
 }
+
 interface IPool {
     function getAmountOut(uint256 amountIn, address tokenIn) external view returns (uint256);
 }
