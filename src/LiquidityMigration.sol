@@ -5,6 +5,8 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {OApp, MessagingFee, Origin} from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/OApp.sol";
 import {MessagingReceipt} from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/OAppSender.sol";
+import "./interfaces/IUniswap.sol";
+import "./interfaces/IStandardBridge.sol";
 
 /**
  * @title LiquidityMigration
@@ -27,7 +29,12 @@ contract LiquidityMigration is OApp {
     address l2LiquidityManager;
 
     /// @notice Emitted when liquidity is removed from a pool
-    event LiquidityRemoved(address tokenA, address tokenB, uint256 amountA, uint256 amountB);
+    event LiquidityRemoved(
+        address tokenA,
+        address tokenB,
+        uint256 amountA,
+        uint256 amountB
+    );
     /// @notice Emitted when tokens are bridged to L2
     event TokensBridged(address token, uint256 amount);
 
@@ -80,7 +87,9 @@ contract LiquidityMigration is OApp {
         uniswapV2Factory = IUniswapV2Factory(_uniswapV2Factory);
         uniswapV2Router = IUniswapV2Router02(_uniswapV2Router);
         uniswapV3Factory = IUniswapV3Factory(_uniswapV3Factory);
-        nonfungiblePositionManager = INonfungiblePositionManager(_nonfungiblePositionManager);
+        nonfungiblePositionManager = INonfungiblePositionManager(
+            _nonfungiblePositionManager
+        );
         l1StandardBridge = StandardBridge(_l1StandardBridge);
         l2LiquidityManager = _l2LiquidityManager;
     }
@@ -92,11 +101,10 @@ contract LiquidityMigration is OApp {
      * @param _options LayerZero options
      * @return receipt MessagingReceipt for the cross-chain message
      */
-    function migrateERC20Liquidity(MigrationParams calldata params, bytes calldata _options)
-        external
-        payable
-        returns (MessagingReceipt memory receipt)
-    {
+    function migrateERC20Liquidity(
+        MigrationParams calldata params,
+        bytes calldata _options
+    ) external payable returns (MessagingReceipt memory receipt) {
         require(params.tokenA != params.tokenB, "Identical addresses");
 
         (uint256 amountA, uint256 amountB) = _removeLiquidity(params);
@@ -106,10 +114,22 @@ contract LiquidityMigration is OApp {
         _bridgeTokens(params, amountA, amountB);
 
         bytes memory payload = abi.encode(
-            params.tokenA, params.tokenB, amountA, amountB, msg.sender, params.poolType, params.stakeLPtokens
+            params.tokenA,
+            params.tokenB,
+            amountA,
+            amountB,
+            msg.sender,
+            params.poolType,
+            params.stakeLPtokens
         );
 
-        receipt = _lzSend(params.dstEid, payload, _options, MessagingFee(msg.value, 0), payable(msg.sender));
+        receipt = _lzSend(
+            params.dstEid,
+            payload,
+            _options,
+            MessagingFee(msg.value, 0),
+            payable(msg.sender)
+        );
 
         return receipt;
     }
@@ -120,15 +140,29 @@ contract LiquidityMigration is OApp {
      * @return amountA Amount of token A received
      * @return amountB Amount of token B received
      */
-    function _removeLiquidity(MigrationParams memory params) internal returns (uint256 amountA, uint256 amountB) {
+    function _removeLiquidity(
+        MigrationParams memory params
+    ) internal returns (uint256 amountA, uint256 amountB) {
         if (isV3Pool(params.tokenA, params.tokenB) && params.tokenId != 0) {
-            return _removeV3Liquidity(
-                params.tokenA, params.tokenB, params.tokenId, params.amountAMin, params.amountBMin, params.deadline
-            );
+            return
+                _removeV3Liquidity(
+                    params.tokenA,
+                    params.tokenB,
+                    params.tokenId,
+                    params.amountAMin,
+                    params.amountBMin,
+                    params.deadline
+                );
         } else {
-            return _removeV2Liquidity(
-                params.tokenA, params.tokenB, params.liquidity, params.amountAMin, params.amountBMin, params.deadline
-            );
+            return
+                _removeV2Liquidity(
+                    params.tokenA,
+                    params.tokenB,
+                    params.liquidity,
+                    params.amountAMin,
+                    params.amountBMin,
+                    params.deadline
+                );
         }
     }
 
@@ -138,9 +172,25 @@ contract LiquidityMigration is OApp {
      * @param amountA Amount of token A to bridge
      * @param amountB Amount of token B to bridge
      */
-    function _bridgeTokens(MigrationParams memory params, uint256 amountA, uint256 amountB) internal {
-        _bridgeToken(params.tokenA, params.l2TokenA, amountA, params.minGasLimit, "Supermigrate Liquidity");
-        _bridgeToken(params.tokenB, params.l2TokenB, amountB, params.minGasLimit, "Supermigrate Liquidity");
+    function _bridgeTokens(
+        MigrationParams memory params,
+        uint256 amountA,
+        uint256 amountB
+    ) internal {
+        _bridgeToken(
+            params.tokenA,
+            params.l2TokenA,
+            amountA,
+            params.minGasLimit,
+            "Supermigrate Liquidity"
+        );
+        _bridgeToken(
+            params.tokenB,
+            params.l2TokenB,
+            amountB,
+            params.minGasLimit,
+            "Supermigrate Liquidity"
+        );
     }
     /**
      * @notice Quotes the fee for cross-chain messaging
@@ -161,7 +211,12 @@ contract LiquidityMigration is OApp {
         bytes memory _options,
         bool _payInLzToken
     ) public view returns (MessagingFee memory fee) {
-        bytes memory payload = abi.encode(tokenA, tokenB, liquidity, msg.sender);
+        bytes memory payload = abi.encode(
+            tokenA,
+            tokenB,
+            liquidity,
+            msg.sender
+        );
         fee = _quote(_dstEid, payload, _options, _payInLzToken);
     }
 
@@ -170,10 +225,12 @@ contract LiquidityMigration is OApp {
      * @dev Required for ERC721 safeTransferFrom
      * @return bytes4 Function selector
      */
-    function onERC721Received(address operator, address from, uint256 tokenId, bytes calldata data)
-        external
-        returns (bytes4)
-    {
+    function onERC721Received(
+        address operator,
+        address from,
+        uint256 tokenId,
+        bytes calldata data
+    ) external returns (bytes4) {
         return this.onERC721Received.selector;
     }
 
@@ -183,10 +240,15 @@ contract LiquidityMigration is OApp {
      * @param tokenB Address of token B
      * @return bool True if it's a V3 pool, false otherwise
      */
-    function isV3Pool(address tokenA, address tokenB) public view returns (bool) {
+    function isV3Pool(
+        address tokenA,
+        address tokenB
+    ) public view returns (bool) {
         uint16[3] memory fees = [500, 3000, 10_000];
         for (uint256 i = 0; i < fees.length; i++) {
-            if (uniswapV3Factory.getPool(tokenA, tokenB, fees[i]) != address(0)) {
+            if (
+                uniswapV3Factory.getPool(tokenA, tokenB, fees[i]) != address(0)
+            ) {
                 return true;
             }
         }
@@ -212,7 +274,10 @@ contract LiquidityMigration is OApp {
         uint256 amountBMin,
         uint256 deadline
     ) internal returns (uint256 amountA, uint256 amountB) {
-        address pair = IUniswapV2Factory(uniswapV2Factory).getPair(tokenA, tokenB);
+        address pair = IUniswapV2Factory(uniswapV2Factory).getPair(
+            tokenA,
+            tokenB
+        );
         require(pair != address(0), "V2: Pool does not exist");
 
         // Transfer LP tokens from user to this contract
@@ -222,9 +287,16 @@ contract LiquidityMigration is OApp {
         IERC20(pair).approve(address(uniswapV2Router), liquidity);
 
         // Remove liquidity
-        (amountA, amountB) = IUniswapV2Router02(uniswapV2Router).removeLiquidity(
-            tokenA, tokenB, liquidity, amountAMin, amountBMin, address(this), deadline
-        );
+        (amountA, amountB) = IUniswapV2Router02(uniswapV2Router)
+            .removeLiquidity(
+                tokenA,
+                tokenB,
+                liquidity,
+                amountAMin,
+                amountBMin,
+                address(this),
+                deadline
+            );
 
         return (amountA, amountB);
     }
@@ -248,40 +320,63 @@ contract LiquidityMigration is OApp {
         uint256 amountBMin,
         uint256 deadline
     ) internal returns (uint256 amountA, uint256 amountB) {
-        (,, address token0, address token1, uint24 fee,,, uint128 liquidity,,,,) =
-            nonfungiblePositionManager.positions(tokenId);
+        (
+            ,
+            ,
+            address token0,
+            address token1,
+            uint24 fee,
+            ,
+            ,
+            uint128 liquidity,
+            ,
+            ,
+            ,
+
+        ) = nonfungiblePositionManager.positions(tokenId);
         require(
-            (token0 == tokenA && token1 == tokenB) || (token0 == tokenB && token1 == tokenA),
+            (token0 == tokenA && token1 == tokenB) ||
+                (token0 == tokenB && token1 == tokenA),
             "Invalid token pair for position"
         );
 
         // Transfer the NFT to this contract
-        nonfungiblePositionManager.safeTransferFrom(msg.sender, address(this), tokenId);
+        nonfungiblePositionManager.safeTransferFrom(
+            msg.sender,
+            address(this),
+            tokenId
+        );
 
         // Decrease liquidity
-        INonfungiblePositionManager.DecreaseLiquidityParams memory params = INonfungiblePositionManager
-            .DecreaseLiquidityParams({
-            tokenId: tokenId,
-            liquidity: liquidity,
-            amount0Min: 0,
-            amount1Min: 0,
-            deadline: deadline
-        });
+        INonfungiblePositionManager.DecreaseLiquidityParams
+            memory params = INonfungiblePositionManager
+                .DecreaseLiquidityParams({
+                    tokenId: tokenId,
+                    liquidity: liquidity,
+                    amount0Min: 0,
+                    amount1Min: 0,
+                    deadline: deadline
+                });
 
-        (uint256 amount0, uint256 amount1) = nonfungiblePositionManager.decreaseLiquidity(params);
+        (uint256 amount0, uint256 amount1) = nonfungiblePositionManager
+            .decreaseLiquidity(params);
 
         // Collect the tokens
-        INonfungiblePositionManager.CollectParams memory collectParams = INonfungiblePositionManager.CollectParams({
-            tokenId: tokenId,
-            recipient: address(this),
-            amount0Max: type(uint128).max,
-            amount1Max: type(uint128).max
-        });
+        INonfungiblePositionManager.CollectParams
+            memory collectParams = INonfungiblePositionManager.CollectParams({
+                tokenId: tokenId,
+                recipient: address(this),
+                amount0Max: type(uint128).max,
+                amount1Max: type(uint128).max
+            });
 
         (amount0, amount1) = nonfungiblePositionManager.collect(collectParams);
 
         // Check minimum amounts
-        require(amount0 >= amountAMin && amount1 >= amountBMin, "Slippage check failed");
+        require(
+            amount0 >= amountAMin && amount1 >= amountBMin,
+            "Slippage check failed"
+        );
 
         nonfungiblePositionManager.burn(tokenId);
 
@@ -304,8 +399,15 @@ contract LiquidityMigration is OApp {
         bytes memory extraData
     ) internal {
         IERC20(localToken).approve(address(l1StandardBridge), amount);
-        l1StandardBridge.bridgeERC20To(localToken, l2Token, l2LiquidityManager, amount, minGasLimit, extraData);
-        
+        l1StandardBridge.bridgeERC20To(
+            localToken,
+            l2Token,
+            l2LiquidityManager,
+            amount,
+            minGasLimit,
+            extraData
+        );
+
         emit TokensBridged(l2Token, amount);
     }
 
@@ -339,158 +441,12 @@ contract LiquidityMigration is OApp {
      * @param _outboundConfirmations Number of confirmations required for outbound messages
      * @param _inboundConfirmations Number of confirmations required for inbound messages
      */
-    function setConfig(uint32 _version, uint32 _dstEid, uint256 _outboundConfirmations, uint256 _inboundConfirmations)
-        external
-        onlyOwner
-    {
+    function setConfig(
+        uint32 _version,
+        uint32 _dstEid,
+        uint256 _outboundConfirmations,
+        uint256 _inboundConfirmations
+    ) external onlyOwner {
         // Implementation needed
     }
-}
-
-interface IUniswapV2Factory {
-    function getPair(address tokenA, address tokenB) external view returns (address pair);
-}
-
-interface IUniswapV2Router02 {
-    function removeLiquidity(
-        address tokenA,
-        address tokenB,
-        uint256 liquidity,
-        uint256 amountAMin,
-        uint256 amountBMin,
-        address to,
-        uint256 deadline
-    ) external returns (uint256 amountA, uint256 amountB);
-}
-
-interface IUniswapV3Factory {
-    function getPool(address tokenA, address tokenB, uint24 fee) external view returns (address pool);
-}
-
-interface INonfungiblePositionManager {
-    struct MintParams {
-        address token0;
-        address token1;
-        uint24 fee;
-        int24 tickLower;
-        int24 tickUpper;
-        uint256 amount0Desired;
-        uint256 amount1Desired;
-        uint256 amount0Min;
-        uint256 amount1Min;
-        address recipient;
-        uint256 deadline;
-    }
-
-    struct IncreaseLiquidityParams {
-        uint256 tokenId;
-        uint256 amount0Desired;
-        uint256 amount1Desired;
-        uint256 amount0Min;
-        uint256 amount1Min;
-        uint256 deadline;
-    }
-
-    struct DecreaseLiquidityParams {
-        uint256 tokenId;
-        uint128 liquidity;
-        uint256 amount0Min;
-        uint256 amount1Min;
-        uint256 deadline;
-    }
-
-    struct CollectParams {
-        uint256 tokenId;
-        address recipient;
-        uint128 amount0Max;
-        uint128 amount1Max;
-    }
-
-    function positions(uint256 tokenId)
-        external
-        view
-        returns (
-            uint96 nonce,
-            address operator,
-            address token0,
-            address token1,
-            uint24 fee,
-            int24 tickLower,
-            int24 tickUpper,
-            uint128 liquidity,
-            uint256 feeGrowthInside0LastX128,
-            uint256 feeGrowthInside1LastX128,
-            uint128 tokensOwed0,
-            uint128 tokensOwed1
-        );
-
-    function mint(MintParams calldata params)
-        external
-        payable
-        returns (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1);
-
-    function increaseLiquidity(IncreaseLiquidityParams calldata params)
-        external
-        payable
-        returns (uint128 liquidity, uint256 amount0, uint256 amount1);
-
-    function decreaseLiquidity(DecreaseLiquidityParams calldata params)
-        external
-        payable
-        returns (uint256 amount0, uint256 amount1);
-
-    function collect(CollectParams calldata params) external payable returns (uint256 amount0, uint256 amount1);
-
-    function burn(uint256 tokenId) external payable;
-
-    function safeTransferFrom(address from, address to, uint256 tokenId) external;
-}
-
-interface StandardBridge {
-    event ERC20BridgeFinalized(
-        address indexed localToken,
-        address indexed remoteToken,
-        address indexed from,
-        address to,
-        uint256 amount,
-        bytes extraData
-    );
-    event ERC20BridgeInitiated(
-        address indexed localToken,
-        address indexed remoteToken,
-        address indexed from,
-        address to,
-        uint256 amount,
-        bytes extraData
-    );
-
-    function bridgeERC20(
-        address _localToken,
-        address _remoteToken,
-        uint256 _amount,
-        uint32 _minGasLimit,
-        bytes memory _extraData
-    ) external;
-    function bridgeERC20To(
-        address _localToken,
-        address _remoteToken,
-        address _to,
-        uint256 _amount,
-        uint32 _minGasLimit,
-        bytes memory _extraData
-    ) external;
-
-    function deposits(address, address) external view returns (uint256);
-
-    function finalizeBridgeERC20(
-        address _localToken,
-        address _remoteToken,
-        address _from,
-        address _to,
-        uint256 _amount,
-        bytes memory _extraData
-    ) external;
-
-    function messenger() external view returns (address);
-    function OTHER_BRIDGE() external view returns (address);
 }
