@@ -34,6 +34,9 @@ contract L2LiquidityManager is OApp {
     /// @dev 10 ** 27
     uint256 public constant RAY = 1e27;
 
+    address public USDC_BASE = 0xd9aAEc86B65D86f6A7B5B1b0c42FFA531710b6CA;
+    address public USDC_BASE_NORMAL = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
+
     uint256 public migrationFee;
     address public feeReceiver;
 
@@ -253,6 +256,16 @@ contract L2LiquidityManager is OApp {
     ) private returns (uint256) {
         bool stable = (poolType == PoolType.STABLE);
 
+        // Check and swap Base USDC if necessary
+        if (tokenA == BASE_USDC) {
+            amountA = _swapBaseUSDCToNormalUSDC(amountA);
+            tokenA = NORMAL_USDC;
+        }
+        if (tokenB == BASE_USDC) {
+            amountB = _swapBaseUSDCToNormalUSDC(amountB);
+            tokenB = NORMAL_USDC;
+        }
+
         amountA = deductFee(tokenA, amountA);
         amountB = deductFee(tokenB, amountB);
 
@@ -336,7 +349,7 @@ contract L2LiquidityManager is OApp {
 
             uint256 amtToReceive = _calculateAmountOut(tokensToSell, y, x);
 
-            amountOutMin = amtToReceive * 9999 / 10_000; // allow for 1bip of error
+            amountOutMin = (amtToReceive * 9999) / 10_000; // allow for 1bip of error
         } else {
             // Sell token A
             tokensToSell = _calculateAmountIn(x, y, a, b, aDecMultiplier, bDecMultiplier);
@@ -344,7 +357,7 @@ contract L2LiquidityManager is OApp {
 
             uint256 amtToReceive = _calculateAmountOut(tokensToSell, x, y);
 
-            amountOutMin = amtToReceive * 9999 / 10_000; // allow for 1bip of error
+            amountOutMin = (amtToReceive * 9999) / 10_000; // allow for 1bip of error
         }
 
         IRouter.Route[] memory routes = new IRouter.Route[](1);
@@ -381,9 +394,9 @@ contract L2LiquidityManager is OApp {
         b = b * bDec;
 
         // Perform calculations
-        uint256 xy = y * x / WAD;
-        uint256 bx = b * x / WAD;
-        uint256 ay = y * a / WAD;
+        uint256 xy = (y * x) / WAD;
+        uint256 bx = (b * x) / WAD;
+        uint256 ay = (y * a) / WAD;
 
         // Compute the square root term
         uint256 innerTerm = (xy + bx) * (3_988_009 * xy + 9 * bx + 3_988_000 * ay);
@@ -396,7 +409,7 @@ contract L2LiquidityManager is OApp {
         uint256 denominator = 1994 * (y + b);
 
         // Calculate the final value of amountIn
-        uint256 amountIn = numerator * WAD / denominator;
+        uint256 amountIn = (numerator * WAD) / denominator;
 
         return amountIn;
     }
@@ -406,7 +419,26 @@ contract L2LiquidityManager is OApp {
         pure
         returns (uint256)
     {
-        return reserveOut * 997 * amountIn / (1000 * reserveIn + 997 * amountIn);
+        return (reserveOut * 997 * amountIn) / (1000 * reserveIn + 997 * amountIn);
+    }
+
+    /**
+     * @dev Swaps Base USDC to normal USDC
+     * @param amount Amount of Base USDC to swap
+     * @return uint256 Amount of normal USDC received
+     */
+    function _swapBaseUSDCToNormalUSDC(uint256 amount) internal returns (uint256) {
+        IERC20(BASE_USDC).approve(address(aerodromeRouter), amount);
+
+        IRouter.Route[] memory routes = new IRouter.Route[](1);
+        routes[0] = IRouter.Route(BASE_USDC, NORMAL_USDC, true, aerodromeRouter.defaultFactory());
+
+        uint256 amountMin = mulDiv(amount, FEE_DENOMINATOR - LIQ_SLIPPAGE, FEE_DENOMINATOR);
+
+        uint256[] memory amounts =
+            aerodromeRouter.swapExactTokensForTokens(amount, amountMin, routes, address(this), block.timestamp);
+
+        return amounts[amounts.length - 1];
     }
 
     /**
