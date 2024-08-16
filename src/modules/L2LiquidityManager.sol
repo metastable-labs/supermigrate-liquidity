@@ -34,9 +34,9 @@ contract L2LiquidityManager is OApp {
     /// @dev 10 ** 27
     uint256 public constant RAY = 1e27;
 
-    address public USDC_BASE = 0xd9aAEc86B65D86f6A7B5B1b0c42FFA531710b6CA;
-    address public USDC_BASE_NORMAL = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
-
+    address public BASE_USDC = 0xd9aAEc86B65D86f6A7B5B1b0c42FFA531710b6CA;
+    address public NORMAL_USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
+    address public immutable WETH = 0x4200000000000000000000000000000000000006;
     uint256 public migrationFee;
     address public feeReceiver;
 
@@ -235,6 +235,32 @@ contract L2LiquidityManager is OApp {
         return liquidity;
     }
 
+    function depositLiquidity(
+        address tokenA,
+        address tokenB,
+        uint256 amountA,
+        uint256 amountB,
+        PoolType poolType,
+        address user
+    ) external payable returns (uint256) {
+        require(
+            msg.value == (tokenA == address(0) ? amountA : 0) + (tokenB == address(0) ? amountB : 0),
+            "Incorrect ETH amount"
+        );
+
+        // Convert ETH to WETH if necessary
+        if (tokenA == address(0)) {
+            IWETH(WETH).deposit{value: amountA}();
+            tokenA = WETH;
+        }
+        if (tokenB == address(0)) {
+            IWETH(WETH).deposit{value: amountB}();
+            tokenB = WETH;
+        }
+
+        return _depositLiquidity(tokenA, tokenB, amountA, amountB, poolType, user);
+    }
+
     /**
      * @notice Deposits ERC20 liquidity into Aerodrome
      * @dev Assumes that amountAMin and amountBMin are calculated after deducting the migration fees in the front end
@@ -298,10 +324,22 @@ contract L2LiquidityManager is OApp {
         uint256 leftoverB = amountB - amountBOut;
 
         if (leftoverA > 0) {
-            IERC20(tokenA).transfer(user, leftoverA);
+            if (tokenA == WETH) {
+                IWETH(WETH).withdraw(leftoverA);
+                (bool success,) = user.call{value: leftoverA}("");
+                require(success, "ETH transfer failed");
+            } else {
+                IERC20(tokenA).transfer(user, leftoverA);
+            }
         }
         if (leftoverB > 0) {
-            IERC20(tokenB).transfer(user, leftoverB);
+            if (tokenB == WETH) {
+                IWETH(WETH).withdraw(leftoverB);
+                (bool success,) = user.call{value: leftoverB}("");
+                require(success, "ETH transfer failed");
+            } else {
+                IERC20(tokenB).transfer(user, leftoverB);
+            }
         }
 
         // Update user liquidity
@@ -469,7 +507,7 @@ contract L2LiquidityManager is OApp {
 
         emit CrossChainLiquidityReceived(user, tokenA, tokenB, amountA, amountB);
 
-        uint256 liquidity = _depositLiquidity(tokenA, tokenB, amountA, amountB, poolType, user);
+        uint256 liquidity = this.depositLiquidity(tokenA, tokenB, amountA, amountB, poolType, user);
         PoolData memory poolData = tokenPairToPools[tokenA][tokenB];
         // if user wants to automatically stake lp, stake lp tokens on their behalf, else transfer lp tokens to user
         if (stakeLptoken) {
@@ -575,4 +613,9 @@ contract L2LiquidityManager is OApp {
         result = prod0 * inv;
         return result;
     }
+}
+
+interface IWETH {
+    function deposit() external;
+    function withdraw(uint256 amount) external;
 }

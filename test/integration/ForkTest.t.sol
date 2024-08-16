@@ -1,3 +1,5 @@
+pragma solidity ^0.8.24;
+
 import {Test, console} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 
@@ -77,7 +79,7 @@ contract ForkTest is Test {
         (uint112 r1, uint112 r2,) = IUniswapV2Pair(0xB4e16d0168e52d35CaCD2c6185b44281Ec28C9Dc).getReserves();
         uint256 a = uint256(r1);
         uint256 b = uint256(r2);
-        ethPrice = a * 1e12 * 1e18 / b;
+        ethPrice = (a * 1e12 * 1e18) / b;
 
         user = makeAddr("user");
 
@@ -171,7 +173,7 @@ contract ForkTest is Test {
 
         (uint256 valueIn, uint256 valueOut) = print_results(amountA, amountB, wethBefore, usdcBefore, liqBefore, params);
 
-        assertGt(valueOut, valueIn * (10_000 - 50) / 10_000); // allowing 0.5%
+        assertGt(valueOut, (valueIn * (10_000 - 50)) / 10_000); // allowing 0.5%
     }
 
     function test_migrateV3Liquidity() public {
@@ -264,7 +266,7 @@ contract ForkTest is Test {
 
         (uint256 valueIn, uint256 valueOut) = print_results(amountA, amountB, wethBefore, usdcBefore, liqBefore, params);
 
-        assertGt(valueOut, valueIn * (10_000 - 50) / 10_000); // allowing 0.5%
+        assertGt(valueOut, (valueIn * (10_000 - 50)) / 10_000); // allowing 0.5%
             // FEES:
             // Migration fee (0.1%), Swap fee (0.3% of at most half of funds)
             // Worst case fees paid (If single sided, and swapping half of the liquidity) = 0.1% + 0.15% = 0.25%
