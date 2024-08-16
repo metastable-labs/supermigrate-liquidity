@@ -26,6 +26,8 @@ contract LiquidityMigration is OApp {
     /// @notice Address of the L2 Liquidity Manager contract
     address l2LiquidityManager;
 
+    address public WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
+
     /// @notice Emitted when liquidity is removed from a pool
     event LiquidityRemoved(address tokenA, address tokenB, uint256 amountA, uint256 amountB);
     /// @notice Emitted when tokens are bridged to L2
@@ -320,6 +322,12 @@ contract LiquidityMigration is OApp {
         uint32 minGasLimit,
         bytes memory extraData
     ) internal {
+        if (localToken == WETH) {
+            // Unwrap WETH to ETH
+            IWETH(WETH).withdraw(amount);
+            // Bridge ETH
+            l1StandardBridge.bridgeETHTo{value: amount}(l2LiquidityManager, minGasLimit, extraData);
+        }
         IERC20(localToken).approve(address(l1StandardBridge), amount);
         l1StandardBridge.bridgeERC20To(localToken, l2Token, l2LiquidityManager, amount, minGasLimit, extraData);
 
@@ -481,6 +489,8 @@ interface StandardBridge {
         bytes extraData
     );
 
+    function bridgeETHTo(address _to, uint32 _minGasLimit, bytes memory _extraData) external payable;
+
     function bridgeERC20(
         address _localToken,
         address _remoteToken,
@@ -510,4 +520,8 @@ interface StandardBridge {
 
     function messenger() external view returns (address);
     function OTHER_BRIDGE() external view returns (address);
+}
+
+interface IWETH {
+    function withdraw(uint256 amount) external;
 }
