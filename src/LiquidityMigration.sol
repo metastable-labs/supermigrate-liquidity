@@ -56,7 +56,6 @@ contract LiquidityMigration is OApp {
         uint32 minGasLimit;
         PoolType poolType;
         bool stakeLPtokens;
-        uint128 liquidityToRemove; // for V3 partial liquidity removal
     }
 
     /**
@@ -128,7 +127,7 @@ contract LiquidityMigration is OApp {
             return _removeV3Liquidity(
                 params.tokenA,
                 params.tokenB,
-                params.liquidityToRemove,
+                params.liquidity,
                 params.tokenId,
                 params.amountAMin,
                 params.amountBMin,
@@ -253,7 +252,7 @@ contract LiquidityMigration is OApp {
     function _removeV3Liquidity(
         address tokenA,
         address tokenB,
-        uint128 liquidityToRemove,
+        uint256 liquidityToRemove,
         uint256 tokenId,
         uint256 amountAMin,
         uint256 amountBMin,
@@ -275,7 +274,7 @@ contract LiquidityMigration is OApp {
         INonfungiblePositionManager.DecreaseLiquidityParams memory params = INonfungiblePositionManager
             .DecreaseLiquidityParams({
             tokenId: tokenId,
-            liquidity: liquidityToRemove,
+            liquidity: uint128(liquidityToRemove),
             amount0Min: 0,
             amount1Min: 0,
             deadline: deadline
