@@ -480,7 +480,7 @@ contract L2LiquidityManager is OApp {
         bytes calldata _extraData
     ) internal override {
         (address tokenA, address tokenB, uint256 amountA, uint256 amountB, address user, PoolType poolType) =
-            abi.decode(_message, (address, address, uint256, uint256, address, PoolType, bool));
+            abi.decode(_message, (address, address, uint256, uint256, address, PoolType));
 
         emit CrossChainLiquidityReceived(user, tokenA, tokenB, amountA, amountB);
 
