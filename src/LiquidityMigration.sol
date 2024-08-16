@@ -26,7 +26,8 @@ contract LiquidityMigration is OApp {
     /// @notice Address of the L2 Liquidity Manager contract
     address l2LiquidityManager;
 
-    address public WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
+    address public constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
+    address public constant base_WETH = 0x4200000000000000000000000000000000000006;
 
     /// @notice Emitted when liquidity is removed from a pool
     event LiquidityRemoved(address tokenA, address tokenB, uint256 amountA, uint256 amountB);
@@ -107,8 +108,18 @@ contract LiquidityMigration is OApp {
 
         _bridgeTokens(params, amountA, amountB);
 
+        address l2TokenA = params.l2TokenA;
+        address l2TokenB = params.l2TokenB;
+
+        if (l2TokenA == base_WETH) {
+            l2TokenA = address(0);
+        }
+        else if (l2TokenB == base_WETH) {
+            l2TokenB = address(0);
+        }
+
         bytes memory payload = abi.encode(
-            params.tokenA, params.tokenB, amountA, amountB, msg.sender, params.poolType, params.stakeLPtokens
+            l2TokenA, l2TokenB, amountA, amountB, msg.sender, params.poolType, params.stakeLPtokens
         );
 
         receipt = _lzSend(params.dstEid, payload, _options, MessagingFee(msg.value, 0), payable(msg.sender));
@@ -327,8 +338,10 @@ contract LiquidityMigration is OApp {
             // Bridge ETH
             l1StandardBridge.bridgeETHTo{value: amount}(l2LiquidityManager, minGasLimit, extraData);
         }
-        IERC20(localToken).approve(address(l1StandardBridge), amount);
-        l1StandardBridge.bridgeERC20To(localToken, l2Token, l2LiquidityManager, amount, minGasLimit, extraData);
+        else {
+            IERC20(localToken).approve(address(l1StandardBridge), amount);
+            l1StandardBridge.bridgeERC20To(localToken, l2Token, l2LiquidityManager, amount, minGasLimit, extraData);
+        }
 
         emit TokensBridged(l2Token, amount);
     }
@@ -369,6 +382,9 @@ contract LiquidityMigration is OApp {
     {
         // Implementation needed
     }
+
+    receive() external payable {}
+
 }
 
 interface IUniswapV2Factory {
