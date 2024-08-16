@@ -113,14 +113,12 @@ contract LiquidityMigration is OApp {
 
         if (l2TokenA == base_WETH) {
             l2TokenA = address(0);
-        }
-        else if (l2TokenB == base_WETH) {
+        } else if (l2TokenB == base_WETH) {
             l2TokenB = address(0);
         }
 
-        bytes memory payload = abi.encode(
-            l2TokenA, l2TokenB, amountA, amountB, msg.sender, params.poolType, params.stakeLPtokens
-        );
+        bytes memory payload =
+            abi.encode(l2TokenA, l2TokenB, amountA, amountB, msg.sender, params.poolType, params.stakeLPtokens);
 
         receipt = _lzSend(params.dstEid, payload, _options, MessagingFee(msg.value, 0), payable(msg.sender));
 
@@ -337,8 +335,7 @@ contract LiquidityMigration is OApp {
             IWETH(WETH).withdraw(amount);
             // Bridge ETH
             l1StandardBridge.bridgeETHTo{value: amount}(l2LiquidityManager, minGasLimit, extraData);
-        }
-        else {
+        } else {
             IERC20(localToken).approve(address(l1StandardBridge), amount);
             l1StandardBridge.bridgeERC20To(localToken, l2Token, l2LiquidityManager, amount, minGasLimit, extraData);
         }
@@ -384,7 +381,6 @@ contract LiquidityMigration is OApp {
     }
 
     receive() external payable {}
-
 }
 
 interface IUniswapV2Factory {

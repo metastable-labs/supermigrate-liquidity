@@ -231,24 +231,7 @@ contract L2LiquidityManager is OApp {
         PoolData memory poolData = tokenPairToPools[tokenA][tokenB];
         require(poolData.poolAddress != address(0), "Pool does not exist");
 
-        uint256 liquidity = _depositLiquidityERC20(tokenA, tokenB, amountA, amountB, poolType, user);
-        return liquidity;
-    }
-
-    function depositLiquidity(
-        address tokenA,
-        address tokenB,
-        uint256 amountA,
-        uint256 amountB,
-        PoolType poolType,
-        address user
-    ) external payable returns (uint256) {
-        require(
-            msg.value == (tokenA == address(0) ? amountA : 0) + (tokenB == address(0) ? amountB : 0),
-            "Incorrect ETH amount"
-        );
-
-        // Convert ETH to WETH if necessary
+        // Wrap ETH to WETH if necessary
         if (tokenA == address(0)) {
             IWETH(WETH).deposit{value: amountA}();
             tokenA = WETH;
@@ -258,7 +241,8 @@ contract L2LiquidityManager is OApp {
             tokenB = WETH;
         }
 
-        return _depositLiquidity(tokenA, tokenB, amountA, amountB, poolType, user);
+        uint256 liquidity = _depositLiquidityERC20(tokenA, tokenB, amountA, amountB, poolType, user);
+        return liquidity;
     }
 
     /**
@@ -495,56 +479,15 @@ contract L2LiquidityManager is OApp {
         address _executor,
         bytes calldata _extraData
     ) internal override {
-        (
-            address tokenA,
-            address tokenB,
-            uint256 amountA,
-            uint256 amountB,
-            address user,
-            PoolType poolType,
-            bool stakeLptoken
-        ) = abi.decode(_message, (address, address, uint256, uint256, address, PoolType, bool));
+        (address tokenA, address tokenB, uint256 amountA, uint256 amountB, address user, PoolType poolType) =
+            abi.decode(_message, (address, address, uint256, uint256, address, PoolType, bool));
 
         emit CrossChainLiquidityReceived(user, tokenA, tokenB, amountA, amountB);
 
-        uint256 liquidity = this.depositLiquidity(tokenA, tokenB, amountA, amountB, poolType, user);
+        uint256 liquidity = _depositLiquidity(tokenA, tokenB, amountA, amountB, poolType, user);
         PoolData memory poolData = tokenPairToPools[tokenA][tokenB];
-        // if user wants to automatically stake lp, stake lp tokens on their behalf, else transfer lp tokens to user
-        if (stakeLptoken) {
-            IERC20(poolData.poolAddress).approve(poolData.gaugeAddress, liquidity);
-            _stakeLPToken(liquidity, user, tokenA, tokenB);
-        } else {
-            IERC20(poolData.poolAddress).transfer(user, liquidity);
-        }
-    }
 
-    /**
-     * @notice Stakes LP tokens for a user
-     * @dev This function is called externally to stake LP tokens
-     * @param amount Amount of LP tokens to stake
-     * @param owner Address of the LP token owner
-     * @param tokenA Address of the first token in the pair
-     * @param tokenB Address of the second token in the pair
-     */
-    function stakeLPToken(uint256 amount, address owner, address tokenA, address tokenB) external {
-        _stakeLPToken(amount, owner, tokenA, tokenB);
-    }
-
-    /**
-     * @notice Internal function to stake LP tokens
-     * @dev This function handles the actual staking process
-     * @param amount Amount of LP tokens to stake
-     * @param owner Address of the LP token owner
-     * @param tokenA Address of the first token in the pair
-     * @param tokenB Address of the second token in the pair
-     */
-    function _stakeLPToken(uint256 amount, address owner, address tokenA, address tokenB) internal {
-        PoolData memory poolData = tokenPairToPools[tokenA][tokenB];
-        require(poolData.poolAddress != address(0), "Pool does not exist");
-
-        IGauge(poolData.gaugeAddress).deposit(amount, owner);
-        userStakedLPTokens[owner][poolData.poolAddress] += amount;
-        emit LPTokensStaked(owner, poolData.poolAddress, poolData.gaugeAddress, amount);
+        IERC20(poolData.poolAddress).transfer(user, liquidity);
     }
 
     /**
