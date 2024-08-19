@@ -232,13 +232,11 @@ contract L2LiquidityManager is OApp {
         require(poolData.poolAddress != address(0), "Pool does not exist");
 
         // Wrap ETH to WETH if necessary
-        if (tokenA == address(0)) {
+        if (tokenA == WETH) {
             IWETH(WETH).deposit{value: amountA}();
-            tokenA = WETH;
         }
-        if (tokenB == address(0)) {
+        if (tokenB == WETH) {
             IWETH(WETH).deposit{value: amountB}();
-            tokenB = WETH;
         }
 
         uint256 liquidity = _depositLiquidityERC20(tokenA, tokenB, amountA, amountB, poolType, user);
@@ -267,13 +265,11 @@ contract L2LiquidityManager is OApp {
         bool stable = (poolType == PoolType.STABLE);
 
         // Check and swap Base USDC if necessary
-        if (tokenA == BASE_USDC) {
+        if (tokenA == NORMAL_USDC) {
             amountA = _swapBaseUSDCToNormalUSDC(amountA);
-            tokenA = NORMAL_USDC;
         }
-        if (tokenB == BASE_USDC) {
+        if (tokenB == NORMAL_USDC) {
             amountB = _swapBaseUSDCToNormalUSDC(amountB);
-            tokenB = NORMAL_USDC;
         }
 
         amountA = deductFee(tokenA, amountA);
@@ -559,6 +555,6 @@ contract L2LiquidityManager is OApp {
 }
 
 interface IWETH {
-    function deposit() external;
-    function withdraw(uint256 amount) external;
+    function deposit() external payable;
+    function withdraw(uint256 amount) external ;
 }

@@ -110,7 +110,7 @@ contract ForkTest is Test {
         vm.label(user, "user");
     }
 
-    function test_migrateV2Liquidity() public {
+    function test_old_migrateV2Liquidity() public {
         vm.selectFork(ethFork);
         deal(address(WETH), user, 10e18);
         deal(address(USDC), user, 25_000e6);

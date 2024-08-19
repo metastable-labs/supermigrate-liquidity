@@ -16,6 +16,9 @@ import {IVoter} from "./test_interfaces/IVoter.sol";
 import {StandardBridge} from "./test_interfaces/IStandardBridge.sol";
 import {IUniswapRouter} from "./test_interfaces/IUniswapRouter.sol";
 
+import {ILayerZeroEndpointV2} from "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/ILayerZeroEndpointV2.sol";
+import { Packet } from "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/ISendLib.sol";
+
 contract ForkTest2 is Test {
     using OptionsBuilder for bytes;
 
@@ -83,6 +86,10 @@ contract ForkTest2 is Test {
 
         address defaultFactory = aerodromeRouter.defaultFactory();
         base_pool = ERC20(aerodromeRouter.poolFor(address(base_tokenP), address(base_tokenQ), false, defaultFactory));
+
+        if (address(base_pool) == address(0)) {
+            revert("The aerodrome pool does not exist");
+        }
         vm.makePersistent(address(base_pool));
 
         pDec = 10 ** base_tokenP.decimals();
@@ -102,6 +109,9 @@ contract ForkTest2 is Test {
         ethFork = vm.createSelectFork(vm.envString("ETH_RPC"));
 
         pool = ERC20(uniswapV2Factory.getPair(address(tokenP), address(tokenQ)));
+        if (address(pool) == address(0)) {
+            revert("The univ2 pool does not exist");
+        }
         vm.makePersistent(address(pool));
         user = makeAddr("user");
 
@@ -130,111 +140,6 @@ contract ForkTest2 is Test {
 
         vm.label(address(l2LiquidityManager), "l2LiquidityManager");
         vm.label(user, "user");
-    }
-
-    function test_new_migrateV2Liquidity() public {
-        vm.selectFork(ethFork);
-        deal(address(tokenP), user, 100 * pDec);
-        deal(address(tokenQ), user, 250 * qDec);
-        deal(user, 20 ether);
-
-        uint256 lpTokens = _addV2Liquidity(user);
-
-        pool.approve(address(liquidityMigration), pool.balanceOf(user));
-
-        LiquidityMigration.MigrationParams memory params = LiquidityMigration.MigrationParams({
-            dstEid: BASE_EID,
-            tokenA: address(tokenP),
-            tokenB: address(tokenQ),
-            l2TokenA: address(base_tokenP),
-            l2TokenB: address(base_tokenQ),
-            liquidity: lpTokens,
-            tokenId: 0,
-            amountAMin: 0,
-            amountBMin: 0,
-            deadline: block.timestamp,
-            minGasLimit: 50_000,
-            poolType: LiquidityMigration.PoolType(stable ? 1 : 0),
-            stakeLPtokens: false
-        });
-
-        // Example options
-        bytes memory options =
-            OptionsBuilder.newOptions().addExecutorLzReceiveOption(200_000, 0).addExecutorLzComposeOption(0, 500_000, 0);
-
-        vm.recordLogs();
-        MessagingReceipt memory receipt = liquidityMigration.migrateERC20Liquidity{value: 0.1 ether}(params, options);
-        vm.stopPrank();
-
-        Vm.Log[] memory entries = vm.getRecordedLogs();
-        (,, uint256 amountA, uint256 amountB) =
-            abi.decode(_getWithdrawLiquidityData(entries), (address, address, uint256, uint256));
-
-        if (params.l2TokenA == baseWETH) {
-            params.l2TokenA = address(0);
-        } else if (params.l2TokenA == baseWETH) {
-            params.l2TokenA = address(0);
-        }
-        bytes memory messageSent =
-            abi.encode(params.l2TokenA, params.l2TokenB, amountA, amountB, user, params.poolType, params.stakeLPtokens);
-
-        // Now switch to Base
-        vm.selectFork(baseFork);
-
-        // Simulate bridged tokens
-        vm.store(l2messenger, bytes32(uint256(204)), bytes32(uint256(uint160(address(l1StandardBridge)))));
-
-        vm.startPrank(l2messenger);
-        if (address(base_tokenP) == baseWETH) {
-            deal(l2messenger, amountA);
-
-            l2StandardBridge.finalizeBridgeETH{value: amountA}(
-                address(liquidityMigration), address(l2LiquidityManager), amountA, ""
-            );
-        } else {
-            l2StandardBridge.finalizeBridgeERC20(
-                address(base_tokenP),
-                address(tokenP),
-                address(liquidityMigration),
-                address(l2LiquidityManager),
-                amountA,
-                ""
-            );
-        }
-
-        if (address(base_tokenQ) == baseWETH) {
-            deal(l2messenger, amountB);
-
-            l2StandardBridge.finalizeBridgeETH{value: amountB}(
-                address(liquidityMigration), address(l2LiquidityManager), amountB, ""
-            );
-        } else {
-            l2StandardBridge.finalizeBridgeERC20(
-                address(base_tokenQ),
-                address(tokenQ),
-                address(liquidityMigration),
-                address(l2LiquidityManager),
-                amountB,
-                ""
-            );
-        }
-        vm.stopPrank();
-
-        address executor = makeAddr("executor");
-
-        Origin memory origin = Origin(ETH_EID, bytes32(uint256(uint160(address(liquidityMigration)))), receipt.nonce);
-
-        uint256 tokenPBefore = base_tokenP.balanceOf(user);
-        uint256 tokenQBefore = base_tokenQ.balanceOf(user);
-        uint256 liqBefore = base_pool.balanceOf(user);
-
-        vm.prank(endpointBase);
-        l2LiquidityManager.lzReceive(origin, receipt.guid, messageSent, executor, "");
-
-        (uint256 valueIn, uint256 valueOut) =
-            print_results(amountA, amountB, tokenPBefore, tokenQBefore, liqBefore, params);
-
-        assertGt(valueOut, valueIn * (10_000 - 50) / 10_000); // allowing 0.5%
     }
 
     function test_new_migrateV3Liquidity() public {
@@ -307,8 +212,7 @@ contract ForkTest2 is Test {
         (,, uint256 amountA, uint256 amountB) =
             abi.decode(_getWithdrawLiquidityData(entries), (address, address, uint256, uint256));
 
-        bytes memory messageSent =
-            abi.encode(params.l2TokenA, params.l2TokenB, amountA, amountB, user, params.poolType, params.stakeLPtokens);
+        bytes memory messageSent = abi.encode(params.l2TokenA, params.l2TokenB, amountA, amountB, user, params.poolType, params.stakeLPtokens);
 
         // Now switch to Base
         vm.selectFork(baseFork);
@@ -332,18 +236,6 @@ contract ForkTest2 is Test {
             print_results(amountA, amountB, tokenPBefore, tokenQBefore, liqBefore, params);
 
         assertGt(valueOut, valueIn * (10_000 - 50) / 10_000); // allowing 0.5%
-    }
-
-    function _addV2Liquidity(address _user) internal returns (uint256 lpTokens) {
-        vm.startPrank(_user);
-        tokenP.approve(address(uniswapV2Router), type(uint256).max);
-        tokenQ.approve(address(uniswapV2Router), type(uint256).max);
-
-        uniswapV2Router.addLiquidity(
-            address(tokenP), address(tokenQ), 100 * pDec, 100 * qDec, 0, 0, _user, block.timestamp
-        );
-
-        lpTokens = pool.balanceOf(_user);
     }
 
     function print_results(
