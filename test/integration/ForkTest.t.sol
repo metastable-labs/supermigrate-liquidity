@@ -24,6 +24,7 @@ contract ForkTest is Test {
     INonfungiblePositionManager public constant nonfungiblePositionManager =
         INonfungiblePositionManager(0xC36442b4a4522E871399CD717aBDD847Ab11FE88);
     StandardBridge public constant l1StandardBridge = StandardBridge(0x3154Cf16ccdb4C6d922629664174b904d80F2C35); // base l1 standard bridge
+    address public constant swapRouterV3 = 0xBE6D8f0d05cC4be24d5167a3eF062215bE6D18a5;
 
     // ETH TOKENS
     ERC20 WETH = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
@@ -70,7 +71,7 @@ contract ForkTest is Test {
         delegate = makeAddr("delegate");
         feeReceiver = makeAddr("feeReceiver");
 
-        l2LiquidityManager = new L2LiquidityManager(aerodromeRouter, feeReceiver, MIGRATION_FEE, endpointBase, delegate);
+        l2LiquidityManager = new L2LiquidityManager(aerodromeRouter, swapRouterV3, feeReceiver, MIGRATION_FEE, endpointBase, delegate);
 
         ///////////////
         // L1 SETUP////
@@ -176,7 +177,7 @@ contract ForkTest is Test {
         assertGt(valueOut, (valueIn * (10_000 - 50)) / 10_000); // allowing 0.5%
     }
 
-    function test_migrateV3Liquidity() public {
+    function test_old_migrateV3Liquidity() public {
         uint256[] memory tokenIds = new uint256[](5);
 
         tokenIds[0] = 777_460;
