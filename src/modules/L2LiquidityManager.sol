@@ -366,7 +366,7 @@ contract L2LiquidityManager is OApp {
         PoolData memory poolData,
         address user
     ) internal returns (uint256) {
-        IConcentratedLiquidityPool pool = IConcentratedLiquidityPool(poolData.poolAddress);
+        ICLPool pool = ICLPool(poolData.poolAddress);
 
         // Approve tokens
         IERC20(tokenA).approve(poolData.poolAddress, amountA);
@@ -399,11 +399,7 @@ contract L2LiquidityManager is OApp {
     /// @param pool The concentrated liquidity pool interface
     /// @return lowerTick The calculated lower tick
     /// @return upperTick The calculated upper tick
-    function _calculateOptimalTickRange(IConcentratedLiquidityPool pool)
-        internal
-        view
-        returns (int24 lowerTick, int24 upperTick)
-    {
+    function _calculateOptimalTickRange(ICLPool pool) internal view returns (int24 lowerTick, int24 upperTick) {
         (uint160 sqrtPriceX96, int24 currentTick,,,,,) = pool.slot0();
 
         // Define a price range of ±10% around the current price
@@ -733,7 +729,7 @@ interface IWETH {
 
 /// @title Interface for Concentrated Liquidity Pool
 /// @notice Defines the functions for interacting with a concentrated liquidity pool
-interface IConcentratedLiquidityPool {
+interface ICLPool {
     /// @notice Mints a new position in the pool
     /// @param lowerTick The lower tick of the position
     /// @param upperTick The upper tick of the position
