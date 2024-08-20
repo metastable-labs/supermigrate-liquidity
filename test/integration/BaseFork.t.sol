@@ -105,8 +105,9 @@ contract BaseFork is Test {
         delegate = makeAddr("delegate");
         feeReceiver = makeAddr("feeReceiver");
 
-        l2LiquidityManager =
-            new L2LiquidityManager(address(aerodromeRouter), swapRouterV3, feeReceiver, MIGRATION_FEE, endpointBase, delegate);
+        l2LiquidityManager = new L2LiquidityManager(
+            address(aerodromeRouter), swapRouterV3, feeReceiver, MIGRATION_FEE, endpointBase, delegate
+        );
 
         ///////////////
         // L1 SETUP////

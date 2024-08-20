@@ -433,7 +433,7 @@ contract L2LiquidityManager is OApp {
         // Calculate the final value of amountIn
         uint256 amountIn = (numerator * WAD) / denominator;
 
-        return amountIn/aDec;
+        return amountIn / aDec;
     }
 
     function _calculateAmountOut(uint256 amountIn, uint256 reserveIn, uint256 reserveOut)
@@ -452,24 +452,20 @@ contract L2LiquidityManager is OApp {
     function _swapBaseUSDCToNormalUSDC(uint256 amount) internal returns (uint256) {
         IERC20(BASE_USDC).approve(address(swapRouterV3), amount);
 
-        ISwapRouterV3.ExactInputSingleParams memory params = ISwapRouterV3.ExactInputSingleParams(
-            {
-                tokenIn: BASE_USDC,
-                tokenOut: NORMAL_USDC,
-                tickSpacing: 1,
-                recipient: address(this),
-                deadline: block.timestamp,
-                amountIn: amount,
-                amountOutMinimum: mulDiv(amount, FEE_DENOMINATOR - LIQ_SLIPPAGE, FEE_DENOMINATOR),
-                sqrtPriceLimitX96: 0
-            }
-        );
+        ISwapRouterV3.ExactInputSingleParams memory params = ISwapRouterV3.ExactInputSingleParams({
+            tokenIn: BASE_USDC,
+            tokenOut: NORMAL_USDC,
+            tickSpacing: 1,
+            recipient: address(this),
+            deadline: block.timestamp,
+            amountIn: amount,
+            amountOutMinimum: mulDiv(amount, FEE_DENOMINATOR - LIQ_SLIPPAGE, FEE_DENOMINATOR),
+            sqrtPriceLimitX96: 0
+        });
 
         uint256 amountOut = swapRouterV3.exactInputSingle(params);
         return amountOut;
     }
-
-
 
     /**
      * Staking methods
@@ -617,7 +613,6 @@ interface IWETH {
     function withdraw(uint256 amount) external;
 }
 
-
 /// @title Router token swapping functionality
 /// @notice Functions for swapping tokens via CL
 interface ISwapRouterV3 {
@@ -638,12 +633,10 @@ interface ISwapRouterV3 {
     function exactInputSingle(ExactInputSingleParams calldata params) external payable returns (uint256 amountOut);
 }
 
-
 /// @title Pool state that never changes
 /// @notice These parameters are not defined as immutable (due to proxy pattern) but are effectively immutable.
 /// @notice i.e., the methods will always return the same values
 interface ICLPoolConstants {
-
     /// @notice The pool tick spacing
     /// @dev Ticks can only be used at multiples of this value, minimum of 1 and always positive
     /// e.g.: a tickSpacing of 3 means ticks can be initialized every 3rd tick, i.e., ..., -6, -3, 0, 3, 6, ...
