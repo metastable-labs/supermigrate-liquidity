@@ -30,17 +30,18 @@ contract V3Test is BaseFork {
         tokenIds[1] = 777_461; // USDC/WETH
         tokenIds[2] = 777_805; // sell tokenB
         tokenIds[3] = 781_034; // sell tokenA
-        tokenIds[4] = 781_470; // Single side
+        tokenIds[4] = 783985; // Single side
 
         // DAI/USDC
         tokenIds[0] = 387_362;
 
-        for (uint256 i = 1; i < 2; i++) {
+        for (uint256 i = 3; i < 4; i++) {
             _migrateV3Liquidity(tokenIds[i]);
         }
     }
 
     function _migrateV3Liquidity(uint256 tokenId) internal {
+
         vm.selectFork(ethFork);
         deal(address(tokenP), user, 10e18);
         deal(address(tokenQ), user, 25_000e6);
@@ -64,7 +65,7 @@ contract V3Test is BaseFork {
         vm.startPrank(user);
         nonfungiblePositionManager.approve(address(liquidityMigration), tokenId);
 
-        (,, address token0, address token1, uint24 fee,,, uint128 liquidity,,,,) =
+        (,,,,,,, uint128 liquidity,,,,) =
             nonfungiblePositionManager.positions(tokenId);
 
         LiquidityMigration.MigrationParams memory params = LiquidityMigration.MigrationParams({
@@ -73,13 +74,13 @@ contract V3Test is BaseFork {
             tokenB: address(tokenQ),
             l2TokenA: address(base_tokenP),
             l2TokenB: address(base_tokenQ),
-            liquidity: liquidity, // entire liquidity
+            liquidity: liquidity, // full liquidity
             tokenId: tokenId,
             amountAMin: 0,
             amountBMin: 0,
             deadline: block.timestamp,
             minGasLimit: 50_000,
-            poolType: LiquidityMigration.PoolType(0),
+            poolType: LiquidityMigration.PoolType(stable ? 1 : 0),
             stakeLPtokens: false
         });
 
@@ -171,6 +172,7 @@ contract V3Test is BaseFork {
         (uint256 valueIn, uint256 valueOut) =
             print_results(amountA, amountB, tokenPBefore, tokenQBefore, liqBefore, params);
 
+        console.log("tokenId is %s", tokenId);
         assertGt(valueOut, valueIn * (10_000 - 50) / 10_000); // allowing 0.5%
     }
 }

@@ -22,6 +22,8 @@ import {Babylonian} from "../lib/Babylonian.sol";
  */
 contract L2LiquidityManager is OApp {
     IRouter public aerodromeRouter;
+    ISwapRouterV3 public swapRouterV3;
+
     PoolData[] private allPools;
     mapping(address => bool) private poolExists;
 
@@ -80,6 +82,7 @@ contract L2LiquidityManager is OApp {
      */
     constructor(
         address _aerodromeRouter,
+        address _swapRouterV3,
         address _feeReceiver,
         uint256 _migrationFee,
         address _endpoint,
@@ -88,6 +91,7 @@ contract L2LiquidityManager is OApp {
         migrationFee = _migrationFee;
         feeReceiver = _feeReceiver;
         aerodromeRouter = IRouter(_aerodromeRouter);
+        swapRouterV3 = ISwapRouterV3(_swapRouterV3);
     }
 
     /**
@@ -446,18 +450,26 @@ contract L2LiquidityManager is OApp {
      * @return uint256 Amount of normal USDC received
      */
     function _swapBaseUSDCToNormalUSDC(uint256 amount) internal returns (uint256) {
-        IERC20(BASE_USDC).approve(address(aerodromeRouter), amount);
+        IERC20(BASE_USDC).approve(address(swapRouterV3), amount);
 
-        IRouter.Route[] memory routes = new IRouter.Route[](1);
-        routes[0] = IRouter.Route(BASE_USDC, NORMAL_USDC, true, aerodromeRouter.defaultFactory());
+        ISwapRouterV3.ExactInputSingleParams memory params = ISwapRouterV3.ExactInputSingleParams(
+            {
+                tokenIn: BASE_USDC,
+                tokenOut: NORMAL_USDC,
+                tickSpacing: 1,
+                recipient: address(this),
+                deadline: block.timestamp,
+                amountIn: amount,
+                amountOutMinimum: mulDiv(amount, FEE_DENOMINATOR - LIQ_SLIPPAGE, FEE_DENOMINATOR),
+                sqrtPriceLimitX96: 0
+            }
+        );
 
-        uint256 amountMin = mulDiv(amount, FEE_DENOMINATOR - LIQ_SLIPPAGE, FEE_DENOMINATOR);
-
-        uint256[] memory amounts =
-            aerodromeRouter.swapExactTokensForTokens(amount, amountMin, routes, address(this), block.timestamp);
-
-        return amounts[amounts.length - 1];
+        uint256 amountOut = swapRouterV3.exactInputSingle(params);
+        return amountOut;
     }
+
+
 
     /**
      * @notice Receives and processes cross-chain messages
@@ -557,4 +569,39 @@ contract L2LiquidityManager is OApp {
 interface IWETH {
     function deposit() external payable;
     function withdraw(uint256 amount) external ;
+}
+
+
+/// @title Router token swapping functionality
+/// @notice Functions for swapping tokens via CL
+interface ISwapRouterV3 {
+    struct ExactInputSingleParams {
+        address tokenIn;
+        address tokenOut;
+        int24 tickSpacing;
+        address recipient;
+        uint256 deadline;
+        uint256 amountIn;
+        uint256 amountOutMinimum;
+        uint160 sqrtPriceLimitX96;
+    }
+
+    /// @notice Swaps `amountIn` of one token for as much as possible of another token
+    /// @param params The parameters necessary for the swap, encoded as `ExactInputSingleParams` in calldata
+    /// @return amountOut The amount of the received token
+    function exactInputSingle(ExactInputSingleParams calldata params) external payable returns (uint256 amountOut);
+}
+
+
+/// @title Pool state that never changes
+/// @notice These parameters are not defined as immutable (due to proxy pattern) but are effectively immutable.
+/// @notice i.e., the methods will always return the same values
+interface ICLPoolConstants {
+
+    /// @notice The pool tick spacing
+    /// @dev Ticks can only be used at multiples of this value, minimum of 1 and always positive
+    /// e.g.: a tickSpacing of 3 means ticks can be initialized every 3rd tick, i.e., ..., -6, -3, 0, 3, 6, ...
+    /// This value is an int24 to avoid casting even though it is always positive.
+    /// @return The tick spacing
+    function tickSpacing() external view returns (int24);
 }

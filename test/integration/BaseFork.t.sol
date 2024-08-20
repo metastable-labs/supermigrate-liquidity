@@ -44,6 +44,7 @@ contract BaseFork is Test {
     // BASE CONTRACTS
     address public base_gauge;
     IRouter public constant aerodromeRouter = IRouter(0xcF77a3Ba9A5CA399B7c97c74d54e5b1Beb874E43);
+    address public constant swapRouterV3 = 0xBE6D8f0d05cC4be24d5167a3eF062215bE6D18a5;
     IVoter public constant voter = IVoter(0x16613524e02ad97eDfeF371bC883F2F5d6C480A5);
     StandardBridge public constant l2StandardBridge = StandardBridge(0x4200000000000000000000000000000000000010);
     address public constant l2messenger = 0x4200000000000000000000000000000000000007;
@@ -106,7 +107,7 @@ contract BaseFork is Test {
         feeReceiver = makeAddr("feeReceiver");
 
         l2LiquidityManager =
-            new L2LiquidityManager(address(aerodromeRouter), feeReceiver, MIGRATION_FEE, endpointBase, delegate);
+            new L2LiquidityManager(address(aerodromeRouter), swapRouterV3, feeReceiver, MIGRATION_FEE, endpointBase, delegate);
 
         ///////////////
         // L1 SETUP////
