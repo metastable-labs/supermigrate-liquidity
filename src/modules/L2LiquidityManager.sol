@@ -191,6 +191,13 @@ contract L2LiquidityManager is OApp {
         return userLiquidity[user][token];
     }
 
+    /// @notice Retrieves the NFT positions of a user
+    /// @param user The address of the user
+    /// @return An array of token IDs representing the user's NFT positions
+    function getUserNFTPositions(address user) external view returns (uint256[] memory) {
+        return userNFTPositions[user];
+    }
+
     /**
      * @notice Gets the staked LP token amount for a user and pool
      * @param user Address of the user
@@ -247,8 +254,11 @@ contract L2LiquidityManager is OApp {
             IWETH(WETH).deposit{value: amountB}();
         }
 
-        uint256 liquidity = _depositLiquidityERC20(tokenA, tokenB, amountA, amountB, poolType, user);
-        return liquidity;
+        if (poolType == PoolType.CONCENTRATED) {
+            return _depositConcentratedLiquidity(tokenA, tokenB, amountA, amountB, poolData, user);
+        } else {
+            return _depositLiquidityERC20(tokenA, tokenB, amountA, amountB, poolType, user);
+        }
     }
 
     /**

@@ -7,6 +7,7 @@ import "../src/LiquidityMigration.sol";
 
 contract DeployLiquidityMigration is Script {
     using stdJson for string;
+
     function run() external {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         vm.startBroadcast(deployerPrivateKey);
@@ -21,9 +22,7 @@ contract DeployLiquidityMigration is Script {
 
         // Read existing deployment info
         string memory existingInfo = vm.readFile("./deployment-addresses.json");
-        address liquidityManagerAddress = existingInfo.readAddress(
-            ".L2LiquidityManager"
-        );
+        address liquidityManagerAddress = existingInfo.readAddress(".L2LiquidityManager");
 
         LiquidityMigration liquidityMigration = new LiquidityMigration(
             lzEndpointL1,
@@ -38,17 +37,11 @@ contract DeployLiquidityMigration is Script {
 
         vm.stopBroadcast();
 
-        console.log(
-            "LiquidityMigration deployed to:",
-            address(liquidityMigration)
-        );
+        console.log("LiquidityMigration deployed to:", address(liquidityMigration));
 
         // Write deployment info to JSON file
-        string memory deploymentInfo = vm.serializeAddress(
-            "deployment",
-            "LiquidityMigration",
-            address(liquidityMigration)
-        );
+        string memory deploymentInfo =
+            vm.serializeAddress("deployment", "LiquidityMigration", address(liquidityMigration));
         vm.writeJson(deploymentInfo, "./deployment-addresses.json");
     }
 }
