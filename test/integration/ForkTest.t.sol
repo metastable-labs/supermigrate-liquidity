@@ -176,7 +176,7 @@ contract ForkTest is Test {
         assertGt(valueOut, (valueIn * (10_000 - 50)) / 10_000); // allowing 0.5%
     }
 
-    function test_migrateV3Liquidity() public {
+    function test_old_migrateV3Liquidity() public {
         uint256[] memory tokenIds = new uint256[](5);
 
         tokenIds[0] = 777_460;

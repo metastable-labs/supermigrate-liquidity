@@ -429,7 +429,7 @@ contract L2LiquidityManager is OApp {
         // Calculate the final value of amountIn
         uint256 amountIn = (numerator * WAD) / denominator;
 
-        return amountIn;
+        return amountIn/aDec;
     }
 
     function _calculateAmountOut(uint256 amountIn, uint256 reserveIn, uint256 reserveOut)
