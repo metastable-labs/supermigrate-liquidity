@@ -2,9 +2,11 @@
 pragma solidity ^0.8.20;
 
 import "forge-std/Script.sol";
+import {stdJson} from "forge-std/StdJson.sol";
 import "../src/LiquidityMigration.sol";
 
 contract DeployLiquidityMigration is Script {
+    using stdJson for string;
     function run() external {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         vm.startBroadcast(deployerPrivateKey);
@@ -17,6 +19,12 @@ contract DeployLiquidityMigration is Script {
         address nonfungiblePositionManager = 0xC36442b4a4522E871399CD717aBDD847Ab11FE88;
         address l1StandardBridge = 0x99C9fc46f92E8a1c0deC1b1747d010903E884bE1; // Optimism's L1 Standard Bridge
 
+        // Read existing deployment info
+        string memory existingInfo = vm.readFile("./deployment-addresses.json");
+        address liquidityManagerAddress = existingInfo.readAddress(
+            ".L2LiquidityManager"
+        );
+
         LiquidityMigration liquidityMigration = new LiquidityMigration(
             lzEndpointL1,
             delegate,
@@ -25,16 +33,22 @@ contract DeployLiquidityMigration is Script {
             uniswapV3Factory,
             nonfungiblePositionManager,
             l1StandardBridge,
-            address(0) // L2LiquidityManager address, to be set later
+            liquidityManagerAddress
         );
 
         vm.stopBroadcast();
 
-        console.log("LiquidityMigration deployed to:", address(liquidityMigration));
+        console.log(
+            "LiquidityMigration deployed to:",
+            address(liquidityMigration)
+        );
 
         // Write deployment info to JSON file
-        string memory deploymentInfo =
-            vm.serializeAddress("deployment", "LiquidityMigration", address(liquidityMigration));
+        string memory deploymentInfo = vm.serializeAddress(
+            "deployment",
+            "LiquidityMigration",
+            address(liquidityMigration)
+        );
         vm.writeJson(deploymentInfo, "./deployment-addresses.json");
     }
 }

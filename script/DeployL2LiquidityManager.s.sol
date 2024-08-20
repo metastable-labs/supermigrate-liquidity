@@ -22,8 +22,6 @@ contract DeployL2LiquidityManager is Script {
         vm.stopBroadcast();
 
         console.log("L2LiquidityManager deployed to:", address(l2LiquidityManager));
-        // Read existing deployment info
-        string memory existingInfo = vm.readFile("./deployment-addresses.json");
 
         // Update with new deployment info
         string memory updatedInfo = vm.serializeAddress("deployment", "L2LiquidityManager", address(l2LiquidityManager));
