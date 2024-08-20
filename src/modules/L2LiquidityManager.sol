@@ -460,6 +460,52 @@ contract L2LiquidityManager is OApp {
     }
 
     /**
+     * Staking methods
+     */
+    /// @notice Stakes LP tokens in the corresponding gauge
+    /// @dev User must approve the gauge to spend their LP tokens before calling this function
+    /// @param amount The amount of LP tokens to stake
+    /// @param tokenA The address of the first token in the pair
+    /// @param tokenB The address of the second token in the pair
+    function stakeLPToken(uint256 amount, address tokenA, address tokenB) external {
+        PoolData memory poolData = tokenPairToPools[tokenA][tokenB];
+        require(poolData.poolAddress != address(0), "Pool does not exist");
+
+        IGauge(poolData.gaugeAddress).deposit(amount, msg.sender);
+        userStakedLPTokens[msg.sender][poolData.poolAddress] += amount;
+        emit LPTokensStaked(msg.sender, poolData.poolAddress, poolData.gaugeAddress, amount);
+    }
+
+    /// @notice Unstakes LP tokens from the corresponding gauge
+    /// @dev This function will fail if the user tries to unstake more than they have staked
+    /// @param amount The amount of LP tokens to unstake
+    /// @param tokenA The address of the first token in the pair
+    /// @param tokenB The address of the second token in the pair
+    function unstakeLPToken(uint256 amount, address tokenA, address tokenB) external {
+        PoolData memory poolData = tokenPairToPools[tokenA][tokenB];
+        require(poolData.poolAddress != address(0), "Pool does not exist");
+
+        require(userStakedLPTokens[msg.sender][poolData.poolAddress] >= amount, "Insufficient staked LP tokens");
+
+        IGauge(poolData.gaugeAddress).withdraw(amount);
+        userStakedLPTokens[msg.sender][poolData.poolAddress] -= amount;
+
+        emit LPTokensWithdrawn(msg.sender, poolData.poolAddress, amount);
+    }
+
+    /// @notice Claims Aero rewards for the caller from the specified pool's gauge
+    /// @dev This function interacts with the Aerodrome gauge to claim rewards
+    /// @param tokenA The address of the first token in the pair
+    /// @param tokenB The address of the second token in the pair
+    function claimAeroRewards(address tokenA, address tokenB) external {
+        PoolData memory poolData = tokenPairToPools[tokenA][tokenB];
+        require(poolData.poolAddress != address(0), "Pool does not exist");
+
+        IGauge(poolData.gaugeAddress).getReward(msg.sender);
+        emit AeroEmissionsClaimed(msg.sender, poolData.poolAddress, poolData.gaugeAddress);
+    }
+
+    /**
      * @notice Receives and processes cross-chain messages
      * @dev This function is called by the LayerZero endpoint when a message is received
      * @param _origin Information about the source of the message
@@ -556,5 +602,5 @@ contract L2LiquidityManager is OApp {
 
 interface IWETH {
     function deposit() external payable;
-    function withdraw(uint256 amount) external ;
+    function withdraw(uint256 amount) external;
 }

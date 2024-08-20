@@ -32,7 +32,6 @@ contract LiquidityMigration is OApp {
     address public constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
     address public constant base_USDbC = 0xd9aAEc86B65D86f6A7B5B1b0c42FFA531710b6CA;
 
-
     /// @notice Emitted when liquidity is removed from a pool
     event LiquidityRemoved(address tokenA, address tokenB, uint256 amountA, uint256 amountB);
     /// @notice Emitted when tokens are bridged to L2
@@ -114,7 +113,6 @@ contract LiquidityMigration is OApp {
 
         address l2TokenA = params.l2TokenA;
         address l2TokenB = params.l2TokenB;
-
 
         bytes memory payload =
             abi.encode(l2TokenA, l2TokenB, amountA, amountB, msg.sender, params.poolType, params.stakeLPtokens);
@@ -335,7 +333,6 @@ contract LiquidityMigration is OApp {
             // Bridge ETH
             l1StandardBridge.bridgeETHTo{value: amount}(l2LiquidityManager, minGasLimit, extraData);
         } else {
-
             if (localToken == USDC) {
                 l2Token = base_USDbC;
             }
