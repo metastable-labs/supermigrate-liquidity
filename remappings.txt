@@ -1,15 +1,6 @@
-@opengsn/=lib/contracts/lib/gsn/packages/
-@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/
 @openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/
-@uniswap/v3-core/=lib/contracts/lib/v3-core/
 @aerodrome/contracts/=lib/contracts/
-ds-test/=lib/contracts/lib/ds-test/src/
-erc4626-tests/=lib/openzeppelin-contracts-upgradeable/lib/erc4626-tests/
 forge-std/=lib/forge-std/src/
-gsn/=lib/contracts/lib/
-utils/=lib/contracts/test/utils/
 @layerzerolabs/lz-evm-oapp-v2/=lib/LayerZero-v2/packages/layerzero-v2/evm/oapp/
 @layerzerolabs/lz-evm-protocol-v2/=lib/LayerZero-v2/packages/layerzero-v2/evm/protocol/
-@layerzerolabs/lz-evm-messagelib-v2/=lib/LayerZero-v2/packages/layerzero-v2/evm/messagelib/
-@layerzerolabs/lz-evm-v1-0.7/=lib/LayerZero/
-solidity-bytes-utils/=lib/solidity-bytes-utils/
+@aerodrome/slipstream=lib/slipstream/contracts
