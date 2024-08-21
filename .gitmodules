@@ -19,3 +19,6 @@
 [submodule "lib/slipstream"]
 	path = lib/slipstream
 	url = https://github.com/aerodrome-finance/slipstream
+[submodule "lib/solidity-bytes-utils"]
+	path = lib/solidity-bytes-utils
+	url = https://github.com/GNSPS/solidity-bytes-utils
