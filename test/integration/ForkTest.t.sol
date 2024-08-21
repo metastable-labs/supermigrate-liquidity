@@ -105,7 +105,7 @@ contract ForkTest is Test {
         vm.selectFork(baseFork);
         vm.startPrank(delegate);
         l2LiquidityManager.setPeer(ETH_EID, bytes32(uint256(uint160(address(liquidityMigration)))));
-        l2LiquidityManager.setPool(address(base_USDC), address(base_WETH), address(base_pool), base_gauge);
+        //l2LiquidityManager.setPool(address(base_USDC), address(base_WETH), address(base_pool), base_gauge, address(0), address(0));
         vm.stopPrank();
 
         vm.label(address(l2LiquidityManager), "l2LiquidityManager");

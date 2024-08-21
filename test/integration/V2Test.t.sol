@@ -31,7 +31,7 @@ contract V2Test is BaseFork {
 
         uint256 lpTokens = _addV2Liquidity(user);
 
-        pool.approve(address(liquidityMigration), pool.balanceOf(user));
+        ERC20(pool).approve(address(liquidityMigration), ERC20(pool).balanceOf(user));
 
         LiquidityMigration.MigrationParams memory params = LiquidityMigration.MigrationParams({
             dstEid: BASE_EID,
@@ -39,7 +39,7 @@ contract V2Test is BaseFork {
             tokenB: address(tokenQ),
             l2TokenA: address(base_tokenP),
             l2TokenB: address(base_tokenQ),
-            liquidity: lpTokens,
+            liquidity: lpTokens / 5,
             tokenId: 0,
             amountAMin: 0,
             amountBMin: 0,
@@ -61,8 +61,7 @@ contract V2Test is BaseFork {
         (,, uint256 amountA, uint256 amountB) =
             abi.decode(_getWithdrawLiquidityData(entries), (address, address, uint256, uint256));
 
-        address l2TokenA;
-        address l2TokenB;
+       
 
         bytes memory messageSent =
             abi.encode(params.l2TokenA, params.l2TokenB, amountA, amountB, user, params.poolType, params.stakeLPtokens);
@@ -72,6 +71,9 @@ contract V2Test is BaseFork {
 
         // Simulate bridged tokens
         vm.store(l2messenger, bytes32(uint256(204)), bytes32(uint256(uint160(address(l1StandardBridge)))));
+
+        address l2TokenA = params.l2TokenA;
+        address l2TokenB = params.l2TokenB;
 
         // Set L2 tokens for bridging
         if (params.l2TokenA == base_WETH) {
@@ -140,6 +142,12 @@ contract V2Test is BaseFork {
         assertGt(valueOut, valueIn * (10_000 - 50) / 10_000); // allowing 0.5%
     }
 
+    function test_getPrice() public {
+        console.log("price is %e", l2LiquidityManager._combinePriceFeeds(address(base_tokenP), address(base_tokenQ)));
+        l2LiquidityManager._checkPriceRatio(address(base_tokenP), address(base_tokenQ), stable);
+    }
+
+
     function _addV2Liquidity(address _user) internal returns (uint256 lpTokens) {
         vm.startPrank(_user);
         tokenP.approve(address(uniswapV2Router), type(uint256).max);
@@ -149,7 +157,7 @@ contract V2Test is BaseFork {
             address(tokenP), address(tokenQ), 100 * pDec, 100 * qDec, 0, 0, _user, block.timestamp
         );
 
-        lpTokens = pool.balanceOf(_user);
+        lpTokens = ERC20(pool).balanceOf(_user);
     }
 }
 

@@ -1,8 +1,3 @@
-// Interacts with aerodrome to deposit Liquidity
-// stake LP tokens for aero rewards
-// Tracks individual migration positions
-// make contracts upgradeable
-
 // SPDX-License-Identifier: GNU
 pragma solidity ^0.8.20;
 
@@ -16,6 +11,11 @@ import {OApp, MessagingFee, Origin} from "@layerzerolabs/lz-evm-oapp-v2/contract
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Babylonian} from "../lib/Babylonian.sol";
 
+import {INonfungiblePositionManager} from "../interfaces/slipstream/INonfungiblePositionManager.sol";
+import {ICLPool} from "../interfaces/slipstream/ICLPool.sol";
+import {AggregatorV3Interface} from "../interfaces/AggregatorV3Interface.sol";
+
+import {console} from "forge-std/console.sol";
 /**
  * @title L2LiquidityManager
  * @dev Manages liquidity on L2, interacting with Aerodrome to deposit liquidity,
@@ -30,16 +30,20 @@ contract L2LiquidityManager is OApp {
 
     /// @dev 10000 = 100%, 5000 = 50%, 100 = 1%, 1 = 0.01%
     uint256 public constant FEE_DENOMINATOR = 10_000;
-    /// @dev Liquidity slippage tolerance: 0.3%
-    uint256 public constant LIQ_SLIPPAGE = 30;
+    /// @dev Liquidity slippage tolerance: 0.5%
+    uint256 public constant LIQ_SLIPPAGE = 50;
     /// @dev 10 ** 18
     uint256 public constant WAD = 1e18;
     /// @dev 10 ** 27
     uint256 public constant RAY = 1e27;
 
-    address public BASE_USDC = 0xd9aAEc86B65D86f6A7B5B1b0c42FFA531710b6CA;
-    address public NORMAL_USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
-    address public immutable WETH = 0x4200000000000000000000000000000000000006;
+    address public constant BASE_USDC = 0xd9aAEc86B65D86f6A7B5B1b0c42FFA531710b6CA;
+    address public constant NORMAL_USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
+    address public constant WETH = 0x4200000000000000000000000000000000000006;
+
+    INonfungiblePositionManager public constant nftPositionManager 
+        = INonfungiblePositionManager(0x827922686190790b37229fd06084350E74485b72);
+
     uint256 public migrationFee;
     address public feeReceiver;
 
@@ -47,6 +51,11 @@ contract L2LiquidityManager is OApp {
     struct PoolData {
         address poolAddress;
         address gaugeAddress;
+    }
+
+    struct PriceFeedData {
+        AggregatorV3Interface feed;
+        uint256 heartbeat;
     }
 
     /// @dev Mapping of user address to token address to liquidity amount
@@ -57,6 +66,8 @@ contract L2LiquidityManager is OApp {
     mapping(address => mapping(address => PoolData)) public tokenPairToPools;
     /// @dev Mapping of user address to their NFT positions
     mapping(address => uint256[]) public userNFTPositions;
+    /// @dev Mapping of token address to it's chainlink price feed data
+    mapping(address => PriceFeedData) public tokenToPriceFeedData;
 
     event LiquidityDeposited(
         address user, address token0, address token1, uint256 amount0, uint256 amount1, uint256 lpTokens
@@ -106,7 +117,10 @@ contract L2LiquidityManager is OApp {
      * @param pool Address of the pool
      * @param gauge Address of the gauge for the pool
      */
-    function setPool(address tokenA, address tokenB, address pool, address gauge) external onlyOwner {
+    function setPool
+    (address tokenA, address tokenB, address pool, address gauge, 
+    PriceFeedData memory feedA, PriceFeedData memory feedB) 
+    external onlyOwner {
         require(
             tokenA != address(0) && tokenB != address(0) && tokenA != tokenB && pool != address(0), "Invalid addresses"
         );
@@ -119,6 +133,9 @@ contract L2LiquidityManager is OApp {
             allPools.push(poolData);
             poolExists[pool] = true;
         }
+
+        tokenToPriceFeedData[tokenA] = feedA;
+        tokenToPriceFeedData[tokenB] = feedB;
 
         emit PoolSet(tokenA, tokenB, pool, gauge);
     }
@@ -293,6 +310,9 @@ contract L2LiquidityManager is OApp {
         amountA = deductFee(tokenA, amountA);
         amountB = deductFee(tokenB, amountB);
 
+        //Compare spot price to chainlink price, to prevent price manipulation attacks
+        _checkPriceRatio(tokenA, tokenB, stable);
+
         // Only balance token ratio for non-stable pairs
         if (!stable) {
             (uint256[] memory amounts, bool sellTokenA) = _balanceTokenRatio(tokenA, tokenB, amountA, amountB);
@@ -310,7 +330,7 @@ contract L2LiquidityManager is OApp {
         IERC20(tokenA).approve(address(aerodromeRouter), amountA);
         IERC20(tokenB).approve(address(aerodromeRouter), amountB);
 
-        // calculate minimum amount with 0.1% slippage
+        // calculate minimum amount with 0.5% slippage
         uint256 amountAMin = mulDiv(amountA, FEE_DENOMINATOR - LIQ_SLIPPAGE, FEE_DENOMINATOR);
         uint256 amountBMin = mulDiv(amountB, FEE_DENOMINATOR - LIQ_SLIPPAGE, FEE_DENOMINATOR);
 
@@ -366,7 +386,7 @@ contract L2LiquidityManager is OApp {
         PoolData memory poolData,
         address user
     ) internal returns (uint256) {
-        IConcentratedLiquidityPool pool = IConcentratedLiquidityPool(poolData.poolAddress);
+        ICLPool pool = ICLPool(poolData.poolAddress);
 
         // Approve tokens
         IERC20(tokenA).approve(poolData.poolAddress, amountA);
@@ -378,11 +398,27 @@ contract L2LiquidityManager is OApp {
         // Calculate the liquidity amount
         uint128 liquidityAmount = _calculateLiquidityAmount(tokenA, tokenB, amountA, amountB, lowerTick, upperTick);
 
+        INonfungiblePositionManager.MintParams memory params =
+            INonfungiblePositionManager.MintParams({
+                token0: tokenA,
+                token1: tokenB,
+                tickSpacing: 2,
+                tickLower: 5,
+                tickUpper:  10,
+                amount0Desired: amountA,
+                amount1Desired: amountB,
+                amount0Min: 0,
+                amount1Min: 0,
+                recipient: address(this),
+                deadline: block.timestamp,
+                sqrtPriceX96: 5
+            });
+
         (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1) =
-            pool.mint(lowerTick, upperTick, liquidityAmount);
+            nftPositionManager.mint(params);
 
         // Transfer the NFT to the user
-        _transferNFTToUser(poolData.poolAddress, tokenId, user);
+        _transferNFTToUser(tokenId, user);
 
         // Update user liquidity
         userLiquidity[user][tokenA] += amount0;
@@ -394,64 +430,7 @@ contract L2LiquidityManager is OApp {
         return liquidity;
     }
 
-    /// @notice Calculates the optimal tick range for a concentrated liquidity position
-    /// @dev Calculates a range of approximately ±10% around the current price
-    /// @param pool The concentrated liquidity pool interface
-    /// @return lowerTick The calculated lower tick
-    /// @return upperTick The calculated upper tick
-    function _calculateOptimalTickRange(IConcentratedLiquidityPool pool)
-        internal
-        view
-        returns (int24 lowerTick, int24 upperTick)
-    {
-        (uint160 sqrtPriceX96, int24 currentTick,,,,,) = pool.slot0();
-
-        // Define a price range of ±10% around the current price
-        int24 tickSpacing = 60; // Assuming a tick spacing of 60
-        int24 tickRange = 2000; // Approximately 10% price range
-
-        lowerTick = ((currentTick - tickRange) / tickSpacing) * tickSpacing;
-        upperTick = ((currentTick + tickRange) / tickSpacing) * tickSpacing;
-
-        // Ensure the calculated ticks are within the allowed range
-        int24 MIN_TICK = -887_272;
-        int24 MAX_TICK = 887_272;
-        lowerTick = lowerTick < MIN_TICK ? MIN_TICK : lowerTick;
-        upperTick = upperTick > MAX_TICK ? MAX_TICK : upperTick;
-
-        return (lowerTick, upperTick);
-    }
-
-    /// @notice Calculates the liquidity amount for a concentrated liquidity position
-    /// @dev This is a simplified calculation and should be replaced with a more accurate one
-    /// @param tokenA The address of the first token
-    /// @param tokenB The address of the second token
-    /// @param amountA The amount of tokenA
-    /// @param amountB The amount of tokenB
-    /// @param lowerTick The lower tick of the position
-    /// @param upperTick The upper tick of the position
-    /// @return The calculated liquidity amount
-    function _calculateLiquidityAmount(
-        address tokenA,
-        address tokenB,
-        uint256 amountA,
-        uint256 amountB,
-        int24 lowerTick,
-        int24 upperTick
-    ) internal view returns (uint128) {
-        return uint128(Babylonian.sqrt(amountA * amountB));
-    }
-
-    /// @notice Transfers an NFT position to the user
-    /// @dev Transfers the NFT and updates the user's NFT positions
-    /// @param poolAddress The address of the pool (NFT contract)
-    /// @param tokenId The ID of the NFT to transfer
-    /// @param user The address of the user to receive the NFT
-    function _transferNFTToUser(address poolAddress, uint256 tokenId, address user) internal {
-        IERC721 nftToken = IERC721(poolAddress);
-        nftToken.transferFrom(address(this), user, tokenId);
-        userNFTPositions[user].push(tokenId);
-    }
+   
 
     function _balanceTokenRatio(address tokenA, address tokenB, uint256 amountA, uint256 amountB)
         internal
@@ -585,6 +564,102 @@ contract L2LiquidityManager is OApp {
         return amountOut;
     }
 
+     /// @notice Calculates the optimal tick range for a concentrated liquidity position
+    /// @dev Calculates a range of approximately ±10% around the current price
+    /// @param pool The concentrated liquidity pool interface
+    /// @return lowerTick The calculated lower tick
+    /// @return upperTick The calculated upper tick
+    function _calculateOptimalTickRange(ICLPool pool)
+        internal
+        view
+        returns (int24 lowerTick, int24 upperTick)
+    {
+        (,int24 currentTick,,,,) = pool.slot0();
+
+        // Define a price range of ±10% around the current price
+        int24 tickSpacing = pool.tickSpacing(); // Assuming a tick spacing of 60
+        int24 tickRange = 2000; // Approximately 10% price range
+
+        lowerTick = ((currentTick - tickRange) / tickSpacing) * tickSpacing;
+        upperTick = ((currentTick + tickRange) / tickSpacing) * tickSpacing;
+
+        // Ensure the calculated ticks are within the allowed range
+        int24 MIN_TICK = -887_272;
+        int24 MAX_TICK = 887_272;
+        lowerTick = lowerTick < MIN_TICK ? MIN_TICK : lowerTick;
+        upperTick = upperTick > MAX_TICK ? MAX_TICK : upperTick;
+
+        return (lowerTick, upperTick);
+    }
+
+    /// @notice Calculates the liquidity amount for a concentrated liquidity position
+    /// @param tokenA The address of the first token
+    /// @param tokenB The address of the second token
+    /// @param amountA The amount of tokenA
+    /// @param amountB The amount of tokenB
+    /// @param lowerTick The lower tick of the position
+    /// @param upperTick The upper tick of the position
+    /// @return The calculated liquidity amount
+    function _calculateLiquidityAmount(
+        address tokenA,
+        address tokenB,
+        uint256 amountA,
+        uint256 amountB,
+        int24 lowerTick,
+        int24 upperTick
+    ) internal view returns (uint128) {
+    }
+
+    /// @notice Transfers an NFT position to the user
+    /// @dev Transfers the NFT and updates the user's NFT positions
+    /// @param tokenId The ID of the NFT to transfer
+    /// @param user The address of the user to receive the NFT
+    function _transferNFTToUser(uint256 tokenId, address user) internal {
+        nftPositionManager.transferFrom(address(this), user, tokenId);
+        userNFTPositions[user].push(tokenId);
+    }
+    
+    /// @notice Gets price by combining two price feeds
+    /// @dev Both feeds must have price denominated in USD
+    /// @dev Returns the price of A denominated in B, after adjusting both to 18 decimals
+    function _combinePriceFeeds(address tokenA, address tokenB) public view returns(uint256) {
+
+        PriceFeedData memory priceFeedA = tokenToPriceFeedData[tokenA];
+        PriceFeedData memory priceFeedB = tokenToPriceFeedData[tokenB]; 
+
+        (, int256 priceA_int,, uint256 updatedAtA, ) = priceFeedA.feed.latestRoundData(); 
+        (, int256 priceB_int,, uint256 updatedAtB, ) = priceFeedB.feed.latestRoundData();
+
+        require(priceA_int > 0 && priceB_int > 0, "Invalid price");
+        require(updatedAtA >= block.timestamp - priceFeedA.heartbeat * 2, "Stale price");
+        require(updatedAtB >= block.timestamp - priceFeedB.heartbeat * 2, "Stale price");
+
+        uint256 priceA = uint256(priceA_int) * 10 ** (18 - priceFeedA.feed.decimals());
+        uint256 priceB = uint256(priceB_int) * 10 ** (18 - priceFeedB.feed.decimals());
+        
+        uint256 aDecMultiplier = (10 ** (18 - IERC20Metadata(tokenA).decimals())); 
+        uint256 bDecMultiplier = (10 ** (18 - IERC20Metadata(tokenB).decimals()));
+
+        return mulDiv(priceA * aDecMultiplier, RAY, priceB * bDecMultiplier);
+    }
+
+    function _checkPriceRatio(address tokenA, address tokenB, bool stable) public view {
+        (uint256 reserveA, uint256 reserveB) =
+        aerodromeRouter.getReserves(tokenA, tokenB, stable, aerodromeRouter.defaultFactory());
+
+        uint256 reserveRatio = mulDiv(reserveB, RAY, reserveA);
+        uint256 priceFeedRatio = _combinePriceFeeds(tokenA, tokenB);
+
+        // 0.5% allowed deviation from chainlink data
+        uint256 allowedDeviation = mulDiv(priceFeedRatio, LIQ_SLIPPAGE, FEE_DENOMINATOR);
+
+        require(_diff(reserveRatio, priceFeedRatio) <= allowedDeviation, "Price has deviated too much");
+    }
+
+    function _diff(uint256 a, uint256 b) internal pure returns(uint256) {
+        return a > b ? a - b : b - a;
+    }
+
     /**
      * Staking methods
      */
@@ -647,8 +722,8 @@ contract L2LiquidityManager is OApp {
         address _executor,
         bytes calldata _extraData
     ) internal override {
-        (address tokenA, address tokenB, uint256 amountA, uint256 amountB, address user, PoolType poolType) =
-            abi.decode(_message, (address, address, uint256, uint256, address, PoolType));
+        (address tokenA, address tokenB, uint256 amountA, uint256 amountB, address user, PoolType poolType, ) =
+            abi.decode(_message, (address, address, uint256, uint256, address, PoolType, bool));
 
         emit CrossChainLiquidityReceived(user, tokenA, tokenB, amountA, amountB);
 
@@ -729,43 +804,6 @@ contract L2LiquidityManager is OApp {
 interface IWETH {
     function deposit() external payable;
     function withdraw(uint256 amount) external;
-}
-
-/// @title Interface for Concentrated Liquidity Pool
-/// @notice Defines the functions for interacting with a concentrated liquidity pool
-interface IConcentratedLiquidityPool {
-    /// @notice Mints a new position in the pool
-    /// @param lowerTick The lower tick of the position
-    /// @param upperTick The upper tick of the position
-    /// @param amount The amount of liquidity to mint
-    /// @return tokenId The ID of the minted NFT position
-    /// @return liquidity The amount of liquidity minted
-    /// @return amount0 The amount of token0 added to the position
-    /// @return amount1 The amount of token1 added to the position
-    function mint(int24 lowerTick, int24 upperTick, uint128 amount)
-        external
-        returns (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1);
-
-    /// @notice Returns the current state of the pool
-    /// @return sqrtPriceX96 The current price of the pool as a sqrt(price) Q64.96 value
-    /// @return tick The current tick of the pool
-    /// @return observationIndex The index of the last oracle observation that was written
-    /// @return observationCardinality The current maximum number of observations stored in the pool
-    /// @return observationCardinalityNext The next maximum number of observations, to be updated when the observation.
-    /// @return feeProtocol The current protocol fee for the pool
-    /// @return unlocked Whether the pool is currently locked to reentrancy
-    function slot0()
-        external
-        view
-        returns (
-            uint160 sqrtPriceX96,
-            int24 tick,
-            uint16 observationIndex,
-            uint16 observationCardinality,
-            uint16 observationCardinalityNext,
-            uint8 feeProtocol,
-            bool unlocked
-        );
 }
 
 /// @title Router token swapping functionality

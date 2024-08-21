@@ -18,17 +18,30 @@ import {IUniswapRouter} from "./test_interfaces/IUniswapRouter.sol";
 
 import {ILayerZeroEndpointV2} from "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/ILayerZeroEndpointV2.sol";
 import {Packet} from "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/ISendLib.sol";
+import {AggregatorV3Interface} from "src/interfaces/AggregatorV3Interface.sol";
 
 contract BaseFork is Test {
     using OptionsBuilder for bytes;
 
-    ///TOKENS
-    ERC20 public constant tokenP = ERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48); //USDC L1
-    ERC20 public constant tokenQ = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2); // WETH L1
+    address public constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
+    address public constant base_WETH = 0x4200000000000000000000000000000000000006;
 
-    ERC20 public constant base_tokenP = ERC20(0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913); // USDC L2
-    ERC20 public constant base_tokenQ = ERC20(0x4200000000000000000000000000000000000006); // WETH L2
+    address public constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
+    address public constant base_USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
+    address public constant base_USDbC = 0xd9aAEc86B65D86f6A7B5B1b0c42FFA531710b6CA;
 
+    address public constant DAI = 0x6B175474E89094C44Da98b954EedeAC495271d0F;
+    address public constant base_DAI = 0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb;
+
+
+    ///Migrated tokens
+    ERC20 public constant tokenP = ERC20(WETH); 
+    ERC20 public constant tokenQ = ERC20(USDC); 
+
+    ERC20 public constant base_tokenP = ERC20(base_WETH); 
+    ERC20 public constant base_tokenQ = ERC20(base_USDC); 
+
+    // is the aerodrome pool stable or not
     bool public constant stable = false;
 
     // ETH CONTRACTS
@@ -39,7 +52,7 @@ contract BaseFork is Test {
         INonfungiblePositionManager(0xC36442b4a4522E871399CD717aBDD847Ab11FE88);
     StandardBridge public constant l1StandardBridge = StandardBridge(0x3154Cf16ccdb4C6d922629664174b904d80F2C35); // base l1 standard bridge
 
-    ERC20 pool;
+    address pool;
 
     // BASE CONTRACTS
     address public base_gauge;
@@ -76,11 +89,8 @@ contract BaseFork is Test {
     uint256 pDec;
     uint256 qDec;
 
-    address public constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
-    address public constant base_WETH = 0x4200000000000000000000000000000000000006;
-
-    address public constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
-    address public constant base_USDbC = 0xd9aAEc86B65D86f6A7B5B1b0c42FFA531710b6CA;
+    
+    mapping(address => L2LiquidityManager.PriceFeedData) public tokenToPriceFeedData;
 
     function setUp() public {
         ///////////////
@@ -88,6 +98,15 @@ contract BaseFork is Test {
         ///////////////
 
         baseFork = vm.createSelectFork(vm.envString("BASE_RPC"));
+        tokenToPriceFeedData[base_USDC] = 
+        L2LiquidityManager.PriceFeedData(AggregatorV3Interface(0x7e860098F58bBFC8648a4311b374B1D669a2bc6B), 86400); // usdc
+
+        tokenToPriceFeedData[base_WETH] = 
+        L2LiquidityManager.PriceFeedData(AggregatorV3Interface(0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70), 1200); // weth
+
+        tokenToPriceFeedData[base_DAI] =  
+        L2LiquidityManager.PriceFeedData(AggregatorV3Interface(0x591e79239a7d679378eC8c847e5038150364C78F), 86400); // dai
+
 
         address defaultFactory = aerodromeRouter.defaultFactory();
         base_pool = ERC20(aerodromeRouter.poolFor(address(base_tokenP), address(base_tokenQ), false, defaultFactory));
@@ -114,11 +133,22 @@ contract BaseFork is Test {
         ///////////////
         ethFork = vm.createSelectFork(vm.envString("ETH_RPC"));
 
-        pool = ERC20(uniswapV2Factory.getPair(address(tokenP), address(tokenQ)));
-        if (address(pool) == address(0)) {
-            revert("The univ2 pool does not exist");
+        pool = uniswapV2Factory.getPair(address(tokenP), address(tokenQ));
+        if (pool == address(0)) {
+            console.log("The univ2 pool does not exist");
+
+            //////////////////////
+            uint16[3] memory fees = [500, 3000, 10_000];
+            for (uint256 i = 0; i < fees.length; i++) {
+                address tempPool = uniswapV3Factory.getPool(address(tokenP), address(tokenQ), fees[i]);
+                if (tempPool != address(0)) {
+                    pool = tempPool;
+                }
+            }
+            /////////////////////////////
         }
-        vm.makePersistent(address(pool));
+        if (pool == address(0)) revert("NO UNIV2 or UNIV3 POOL");
+        vm.makePersistent(pool);
         user = makeAddr("user");
 
         liquidityMigration = new LiquidityMigration(
@@ -141,7 +171,12 @@ contract BaseFork is Test {
         vm.selectFork(baseFork);
         vm.startPrank(delegate);
         l2LiquidityManager.setPeer(ETH_EID, bytes32(uint256(uint160(address(liquidityMigration)))));
-        l2LiquidityManager.setPool(address(base_tokenQ), address(base_tokenP), address(base_pool), base_gauge);
+
+
+        L2LiquidityManager.PriceFeedData memory a = tokenToPriceFeedData[address(base_tokenP)];
+        L2LiquidityManager.PriceFeedData memory b =  tokenToPriceFeedData[address(base_tokenQ)];
+
+        l2LiquidityManager.setPool(address(base_tokenP), address(base_tokenQ), address(base_pool), base_gauge, a, b);
 
         vm.stopPrank();
 
@@ -149,6 +184,7 @@ contract BaseFork is Test {
         vm.label(user, "user");
     }
 
+    
     function print_results(
         uint256 amountA,
         uint256 amountB,
@@ -175,12 +211,11 @@ contract BaseFork is Test {
             amountAOut += tokenQGain;
             amountBOut += tokenPGain;
         }
+        console.log("amountAIn: %e", amountA);
+        console.log("amountBIn: %e", amountB);
 
         console.log("amountAOut: %e", amountAOut);
         console.log("amountBOut: %e", amountBOut);
-
-        console.log("amountAIn: %e", amountA);
-        console.log("amountBIn: %e", amountB);
 
         uint256 valueIn;
         uint256 valueOut;
@@ -191,8 +226,9 @@ contract BaseFork is Test {
         valueIn = amountA_converted + amountB;
         valueOut = amountAOut_converted + amountBOut;
 
-        console.log("valueIn: %e", valueIn);
-        console.log("valueOut: %e", valueOut);
+        console.log("valueIn: %e (%s)", valueIn, IERC20Metadata(params.l2TokenB).symbol());
+        console.log("valueOut: %e (%s)", valueOut, IERC20Metadata(params.l2TokenB).symbol());
+
 
         return (valueIn, valueOut);
     }
