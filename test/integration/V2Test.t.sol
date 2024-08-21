@@ -17,7 +17,7 @@ import {StandardBridge} from "./test_interfaces/IStandardBridge.sol";
 import {IUniswapRouter} from "./test_interfaces/IUniswapRouter.sol";
 
 import {ILayerZeroEndpointV2} from "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/ILayerZeroEndpointV2.sol";
-import { Packet } from "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/ISendLib.sol";
+import {Packet} from "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/ISendLib.sol";
 import {BaseFork} from "./BaseFork.t.sol";
 
 contract V2Test is BaseFork {
@@ -30,7 +30,7 @@ contract V2Test is BaseFork {
         deal(user, 20 ether);
 
         uint256 lpTokens = _addV2Liquidity(user);
-        
+
         pool.approve(address(liquidityMigration), pool.balanceOf(user));
 
         LiquidityMigration.MigrationParams memory params = LiquidityMigration.MigrationParams({
@@ -64,16 +64,14 @@ contract V2Test is BaseFork {
         address l2TokenA;
         address l2TokenB;
 
-        
-
-        bytes memory messageSent = abi.encode(params.l2TokenA, params.l2TokenB, amountA, amountB, user, params.poolType, params.stakeLPtokens);
+        bytes memory messageSent =
+            abi.encode(params.l2TokenA, params.l2TokenB, amountA, amountB, user, params.poolType, params.stakeLPtokens);
 
         // Now switch to Base
         vm.selectFork(baseFork);
 
         // Simulate bridged tokens
         vm.store(l2messenger, bytes32(uint256(204)), bytes32(uint256(uint160(address(l1StandardBridge)))));
-
 
         // Set L2 tokens for bridging
         if (params.l2TokenA == base_WETH) {
@@ -84,8 +82,7 @@ contract V2Test is BaseFork {
         // Sanity check for USDC
         if (params.tokenA == USDC) {
             l2TokenA = base_USDbC;
-        }
-        else if (params.tokenB == USDC) {
+        } else if (params.tokenB == USDC) {
             l2TokenB = base_USDbC;
         }
 
@@ -96,8 +93,7 @@ contract V2Test is BaseFork {
             l2StandardBridge.finalizeBridgeETH{value: amountA}(
                 address(liquidityMigration), address(l2LiquidityManager), amountA, ""
             );
-        } 
-        else {
+        } else {
             l2StandardBridge.finalizeBridgeERC20(
                 address(l2TokenA),
                 address(tokenP),
@@ -114,8 +110,7 @@ contract V2Test is BaseFork {
             l2StandardBridge.finalizeBridgeETH{value: amountB}(
                 address(liquidityMigration), address(l2LiquidityManager), amountB, ""
             );
-        } 
-        else {
+        } else {
             l2StandardBridge.finalizeBridgeERC20(
                 address(l2TokenB),
                 address(tokenQ),

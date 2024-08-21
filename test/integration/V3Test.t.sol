@@ -17,9 +17,10 @@ import {StandardBridge} from "./test_interfaces/IStandardBridge.sol";
 import {IUniswapRouter} from "./test_interfaces/IUniswapRouter.sol";
 
 import {ILayerZeroEndpointV2} from "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/ILayerZeroEndpointV2.sol";
-import { Packet } from "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/ISendLib.sol";
+import {Packet} from "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/ISendLib.sol";
 
 import {BaseFork, INonfungiblePositionManager} from "./BaseFork.t.sol";
+
 contract V3Test is BaseFork {
     using OptionsBuilder for bytes;
 
@@ -30,7 +31,7 @@ contract V3Test is BaseFork {
         tokenIds[1] = 777_461; // USDC/WETH
         tokenIds[2] = 777_805; // sell tokenB
         tokenIds[3] = 781_034; // sell tokenA
-        tokenIds[4] = 783985; // Single side
+        tokenIds[4] = 783_985; // Single side
 
         // DAI/USDC
         tokenIds[0] = 387_362;
@@ -41,7 +42,6 @@ contract V3Test is BaseFork {
     }
 
     function _migrateV3Liquidity(uint256 tokenId) internal {
-
         vm.selectFork(ethFork);
         deal(address(tokenP), user, 10e18);
         deal(address(tokenQ), user, 25_000e6);
@@ -65,8 +65,7 @@ contract V3Test is BaseFork {
         vm.startPrank(user);
         nonfungiblePositionManager.approve(address(liquidityMigration), tokenId);
 
-        (,,,,,,, uint128 liquidity,,,,) =
-            nonfungiblePositionManager.positions(tokenId);
+        (,,,,,,, uint128 liquidity,,,,) = nonfungiblePositionManager.positions(tokenId);
 
         LiquidityMigration.MigrationParams memory params = LiquidityMigration.MigrationParams({
             dstEid: BASE_EID,
@@ -97,7 +96,8 @@ contract V3Test is BaseFork {
         (,, uint256 amountA, uint256 amountB) =
             abi.decode(_getWithdrawLiquidityData(entries), (address, address, uint256, uint256));
 
-        bytes memory messageSent = abi.encode(params.l2TokenA, params.l2TokenB, amountA, amountB, user, params.poolType, params.stakeLPtokens);
+        bytes memory messageSent =
+            abi.encode(params.l2TokenA, params.l2TokenB, amountA, amountB, user, params.poolType, params.stakeLPtokens);
 
         // Now switch to Base
         vm.selectFork(baseFork);
@@ -115,8 +115,7 @@ contract V3Test is BaseFork {
         // Sanity check for USDC
         if (params.tokenA == USDC) {
             l2TokenA = base_USDbC;
-        }
-        else if (params.tokenB == USDC) {
+        } else if (params.tokenB == USDC) {
             l2TokenB = base_USDbC;
         }
 
@@ -127,8 +126,7 @@ contract V3Test is BaseFork {
             l2StandardBridge.finalizeBridgeETH{value: amountA}(
                 address(liquidityMigration), address(l2LiquidityManager), amountA, ""
             );
-        } 
-        else {
+        } else {
             l2StandardBridge.finalizeBridgeERC20(
                 address(l2TokenA),
                 address(tokenP),
@@ -145,8 +143,7 @@ contract V3Test is BaseFork {
             l2StandardBridge.finalizeBridgeETH{value: amountB}(
                 address(liquidityMigration), address(l2LiquidityManager), amountB, ""
             );
-        } 
-        else {
+        } else {
             l2StandardBridge.finalizeBridgeERC20(
                 address(l2TokenB),
                 address(tokenQ),
@@ -187,7 +184,6 @@ interface IUniswapV2Factory {
 interface IUniswapV3Factory {
     function getPool(address tokenA, address tokenB, uint24 fee) external view returns (address pool);
 }
-
 
 interface IUniswapV2Pair {
     function getReserves() external view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast);
