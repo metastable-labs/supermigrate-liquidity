@@ -135,7 +135,7 @@ contract L2LiquidityManager is OApp {
         tokenPairToPools[tokenB][tokenA] = poolData;
         emit PoolSet(tokenA, tokenB, pool, gauge);
 
-        // NEW, able to store multiple different pool types for same token pair
+        // NEW: able to store multiple different pool types for same token pair
         bytes32 poolKey = getPoolKey(tokenA, tokenB, poolData.poolType);
         poolKeyToPoolData[poolKey] = poolData;
 
@@ -416,6 +416,9 @@ contract L2LiquidityManager is OApp {
         address user
     ) internal returns (uint256) {
         ICLPool pool = ICLPool(poolData.poolAddress);
+
+        //Compare spot price to chainlink price, to prevent price manipulation attacks
+        _checkPriceRatio(tokenA, tokenB, amountA, amountB, poolData.poolType);
 
         // Approve tokens
         IERC20(tokenA).approve(poolData.poolAddress, amountA);
@@ -717,16 +720,34 @@ contract L2LiquidityManager is OApp {
             require(_diff(reserveRatio, priceFeedRatio) <= allowedDeviation, "Price has deviated too much");
         }
         else if (poolType == PoolType.BASIC_STABLE) { // If stable pool, check using amountOut when swapping
-            IPool pool = IPool(poolData.poolAddress);
+            IPool pool = IPool(poolData.poolAddress);            
+
             require(amountA > 0 || amountB > 0);
+
             uint256 amountOut;
+            uint256 lowerBound;
+            uint256 upperBound;
+
             if (amountA > 0) {
-                amountOut = pool.getAmountOut(amountA, tokenA);
-                require(amountOut*bDecMultiplier >= mulDiv(amountA * aDecMultiplier, FEE_DENOMINATOR - LIQ_SLIPPAGE, FEE_DENOMINATOR));
+                // divide amount by 10 to reduce price impact of theoretical swap
+                amountOut = pool.getAmountOut(amountA / 10, tokenA); 
+                lowerBound = mulDiv(amountA * aDecMultiplier, FEE_DENOMINATOR - LIQ_SLIPPAGE, FEE_DENOMINATOR);
+                upperBound = mulDiv(amountA * aDecMultiplier, FEE_DENOMINATOR + LIQ_SLIPPAGE, FEE_DENOMINATOR);
+
+                require(amountOut*bDecMultiplier*10 >= lowerBound && amountOut*bDecMultiplier*10 <= upperBound,
+                        "Price impact exceeded 0.5%"
+                );
             }
             else {
-                amountOut = pool.getAmountOut(amountB, tokenB);
-                require(amountOut*aDecMultiplier >= mulDiv(amountB * bDecMultiplier, FEE_DENOMINATOR - LIQ_SLIPPAGE, FEE_DENOMINATOR));
+                // divide amount by 10 to reduce price impact of theoretical swap
+                amountOut = pool.getAmountOut(amountB / 10, tokenB); 
+
+                lowerBound = mulDiv(amountB * bDecMultiplier, FEE_DENOMINATOR - LIQ_SLIPPAGE, FEE_DENOMINATOR);
+                upperBound = mulDiv(amountB * bDecMultiplier, FEE_DENOMINATOR + LIQ_SLIPPAGE, FEE_DENOMINATOR);
+
+                require(amountOut*aDecMultiplier*10 >= lowerBound && amountOut*aDecMultiplier <= upperBound,
+                        "Price impact exceeded 0.5%"
+                );
             }
         }
         else { // concentrated pool, check slot0
