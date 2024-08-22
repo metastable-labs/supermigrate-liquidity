@@ -763,8 +763,9 @@ contract L2LiquidityManager is OApp {
                 tokenB = temp;
             }
 
-            uint256 priceFeedRatio = _combinePriceFeeds(tokenA, tokenB); // tokenA in tokenB
-            uint256 spotPrice = _getPriceRatio(sqrtPriceX96);
+            uint256 priceFeedRatio = _combinePriceFeeds(tokenA, tokenB); // tokenA in tokenB (multiplied by RAY/WAD)
+            uint256 token0Dec = IERC20Metadata(poolToken0).decimals();
+            uint256 spotPrice = _getPriceRatio(sqrtPriceX96, token0Dec);
 
             //0.5% allowed deviation from chainlink data
             uint256 allowedDeviation = mulDiv(priceFeedRatio, LIQ_SLIPPAGE, FEE_DENOMINATOR);
@@ -773,8 +774,8 @@ contract L2LiquidityManager is OApp {
         }
     }
 
-    function _getPriceRatio(uint160 sqrtPriceX96) internal pure returns(uint256) {
-        return mulDiv(uint256(sqrtPriceX96), uint256(sqrtPriceX96), 2 ** 192);
+    function _getPriceRatio(uint160 sqrtPriceX96, uint256 dec) internal pure returns(uint256) {
+        return mulDiv(uint256(sqrtPriceX96), (10 ** dec) * (RAY / WAD) * uint256(sqrtPriceX96), 2 ** 192);
     }
     function _diff(uint256 a, uint256 b) internal pure returns(uint256) {
         return a > b ? a - b : b - a;
