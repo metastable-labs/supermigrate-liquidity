@@ -60,8 +60,7 @@ contract V2Test is BaseFork {
             amountBMin: 0,
             deadline: block.timestamp,
             minGasLimit: 50_000,
-            poolType: poolType,
-            stakeLPtokens: false
+            poolType: poolType
         });
 
         // Example options
@@ -79,7 +78,7 @@ contract V2Test is BaseFork {
        
 
         bytes memory messageSent =
-            abi.encode(params.l2TokenA, params.l2TokenB, amountA, amountB, user, params.poolType, params.stakeLPtokens);
+            abi.encode(params.l2TokenA, params.l2TokenB, amountA, amountB, user, params.poolType);
 
         // Now switch to Base
         vm.selectFork(baseFork);
