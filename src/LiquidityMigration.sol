@@ -40,9 +40,10 @@ contract LiquidityMigration is OApp {
     /// @notice Enum representing different types of liquidity pools
     enum PoolType {
         NONE,
-        STABLE,
-        VOLATILE,
-        CONCENTRATED
+        BASIC_STABLE,
+        BASIC_VOLATILE,
+        CONCENTRATED_STABLE,
+        CONCENTRATED_VOLATILE
     }
 
     // New struct to hold migration parameters

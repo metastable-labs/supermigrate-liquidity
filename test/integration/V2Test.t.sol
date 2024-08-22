@@ -25,9 +25,24 @@ contract V2Test is BaseFork {
 
     function test_migrateV2Liquidity() public {
         vm.selectFork(ethFork);
-        deal(address(tokenP), user, 100 * pDec);
-        deal(address(tokenQ), user, 250 * qDec);
-        deal(user, 20 ether);
+
+        if (address(tokenP) == WETH) {
+            deal(address(tokenP), user, 10 * pDec); // 10e18
+            deal(address(tokenQ), user, 30000 * qDec); // 30000e6 USDC
+        }
+        else if (address(tokenQ) == base_WETH) {
+            // P is stable
+            deal(address(tokenP), user, 25000 * pDec);
+
+            // Q is WETH
+            deal(address(tokenQ), user, 10 * qDec);
+        }
+        else { // both not WETH
+            deal(address(tokenP), user, 25000 * pDec);
+            deal(address(tokenQ), user, 25000 * qDec);
+        }
+
+        deal(user, 1 ether);
 
         uint256 lpTokens = _addV2Liquidity(user);
 
@@ -39,13 +54,13 @@ contract V2Test is BaseFork {
             tokenB: address(tokenQ),
             l2TokenA: address(base_tokenP),
             l2TokenB: address(base_tokenQ),
-            liquidity: lpTokens / 5,
+            liquidity: lpTokens,
             tokenId: 0,
             amountAMin: 0,
             amountBMin: 0,
             deadline: block.timestamp,
             minGasLimit: 50_000,
-            poolType: LiquidityMigration.PoolType(stable ? 1 : 0),
+            poolType: poolType,
             stakeLPtokens: false
         });
 
@@ -144,7 +159,9 @@ contract V2Test is BaseFork {
 
     function test_getPrice() public {
         console.log("price is %e", l2LiquidityManager._combinePriceFeeds(address(base_tokenP), address(base_tokenQ)));
-        l2LiquidityManager._checkPriceRatio(address(base_tokenP), address(base_tokenQ), stable);
+
+        L2LiquidityManager.PoolType pType = L2LiquidityManager.PoolType(uint256(poolType));
+        l2LiquidityManager._checkPriceRatio(address(base_tokenP), address(base_tokenQ), 100 * pDec, 100 * qDec, pType);
     }
 
 

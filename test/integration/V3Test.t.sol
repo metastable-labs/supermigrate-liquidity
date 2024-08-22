@@ -33,12 +33,12 @@ contract V3Test is BaseFork {
         tokenIds[3] = 781_034; // sell tokenA
         tokenIds[4] = 783_985; // Single side
 
-        // DAI/USDC
-        tokenIds[0] = 387_362;
-
         for (uint256 i = 3; i < 4; i++) {
-            _migrateV3Liquidity(tokenIds[i]);
+            //_migrateV3Liquidity(tokenIds[i]);
         }
+
+        _migrateV3Liquidity(387362); // DAI USDC
+        //_migrateV3Liquidity(51061); // DAI USDC (whale)
     }
 
     function _migrateV3Liquidity(uint256 tokenId) internal {
@@ -79,7 +79,7 @@ contract V3Test is BaseFork {
             amountBMin: 0,
             deadline: block.timestamp,
             minGasLimit: 50_000,
-            poolType: LiquidityMigration.PoolType(stable ? 1 : 0),
+            poolType: poolType,
             stakeLPtokens: false
         });
 
@@ -104,8 +104,8 @@ contract V3Test is BaseFork {
 
         vm.store(l2messenger, bytes32(uint256(204)), bytes32(uint256(uint160(address(l1StandardBridge)))));
 
-        address l2TokenA;
-        address l2TokenB;
+        address l2TokenA = params.l2TokenA;
+        address l2TokenB = params.l2TokenB;
         // Set L2 tokens for bridging
         if (params.l2TokenA == base_WETH) {
             l2TokenA = address(0);
