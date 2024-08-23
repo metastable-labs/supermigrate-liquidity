@@ -25,13 +25,28 @@ contract V2Test is BaseFork {
 
     function test_migrateV2Liquidity() public {
         vm.selectFork(ethFork);
-        deal(address(tokenP), user, 100 * pDec);
-        deal(address(tokenQ), user, 250 * qDec);
-        deal(user, 20 ether);
+
+        if (address(tokenP) == WETH) {
+            deal(address(tokenP), user, 10 * pDec); // 10e18
+            deal(address(tokenQ), user, 30000 * qDec); // 30000e6 USDC
+        }
+        else if (address(tokenQ) == base_WETH) {
+            // P is stable
+            deal(address(tokenP), user, 25000 * pDec);
+
+            // Q is WETH
+            deal(address(tokenQ), user, 10 * qDec);
+        }
+        else { // both not WETH
+            deal(address(tokenP), user, 25000 * pDec);
+            deal(address(tokenQ), user, 25000 * qDec);
+        }
+
+        deal(user, 1 ether);
 
         uint256 lpTokens = _addV2Liquidity(user);
 
-        pool.approve(address(liquidityMigration), pool.balanceOf(user));
+        ERC20(pool).approve(address(liquidityMigration), ERC20(pool).balanceOf(user));
 
         LiquidityMigration.MigrationParams memory params = LiquidityMigration.MigrationParams({
             dstEid: BASE_EID,
@@ -45,8 +60,7 @@ contract V2Test is BaseFork {
             amountBMin: 0,
             deadline: block.timestamp,
             minGasLimit: 50_000,
-            poolType: LiquidityMigration.PoolType(stable ? 1 : 0),
-            stakeLPtokens: false
+            poolType: poolType
         });
 
         // Example options
@@ -61,17 +75,19 @@ contract V2Test is BaseFork {
         (,, uint256 amountA, uint256 amountB) =
             abi.decode(_getWithdrawLiquidityData(entries), (address, address, uint256, uint256));
 
-        address l2TokenA;
-        address l2TokenB;
+       
 
         bytes memory messageSent =
-            abi.encode(params.l2TokenA, params.l2TokenB, amountA, amountB, user, params.poolType, params.stakeLPtokens);
+            abi.encode(params.l2TokenA, params.l2TokenB, amountA, amountB, user, params.poolType);
 
         // Now switch to Base
         vm.selectFork(baseFork);
 
         // Simulate bridged tokens
         vm.store(l2messenger, bytes32(uint256(204)), bytes32(uint256(uint160(address(l1StandardBridge)))));
+
+        address l2TokenA = params.l2TokenA;
+        address l2TokenB = params.l2TokenB;
 
         // Set L2 tokens for bridging
         if (params.l2TokenA == base_WETH) {
@@ -140,6 +156,14 @@ contract V2Test is BaseFork {
         assertGt(valueOut, valueIn * (10_000 - 50) / 10_000); // allowing 0.5%
     }
 
+    function test_getPrice() public {
+        console.log("price is %e", l2LiquidityManager._combinePriceFeeds(address(base_tokenP), address(base_tokenQ)));
+
+        L2LiquidityManager.PoolType pType = L2LiquidityManager.PoolType(uint256(poolType));
+        l2LiquidityManager._checkPriceRatio(address(base_tokenP), address(base_tokenQ), 100 * pDec, 100 * qDec, pType);
+    }
+
+
     function _addV2Liquidity(address _user) internal returns (uint256 lpTokens) {
         vm.startPrank(_user);
         tokenP.approve(address(uniswapV2Router), type(uint256).max);
@@ -149,7 +173,7 @@ contract V2Test is BaseFork {
             address(tokenP), address(tokenQ), 100 * pDec, 100 * qDec, 0, 0, _user, block.timestamp
         );
 
-        lpTokens = pool.balanceOf(_user);
+        lpTokens = ERC20(pool).balanceOf(_user);
     }
 }
 

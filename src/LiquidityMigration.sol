@@ -40,9 +40,10 @@ contract LiquidityMigration is OApp {
     /// @notice Enum representing different types of liquidity pools
     enum PoolType {
         NONE,
-        STABLE,
-        VOLATILE,
-        CONCENTRATED
+        BASIC_STABLE,
+        BASIC_VOLATILE,
+        CONCENTRATED_STABLE,
+        CONCENTRATED_VOLATILE
     }
 
     // New struct to hold migration parameters
@@ -59,7 +60,6 @@ contract LiquidityMigration is OApp {
         uint256 deadline;
         uint32 minGasLimit;
         PoolType poolType;
-        bool stakeLPtokens;
     }
 
     /**
@@ -115,7 +115,7 @@ contract LiquidityMigration is OApp {
         address l2TokenB = params.l2TokenB;
 
         bytes memory payload =
-            abi.encode(l2TokenA, l2TokenB, amountA, amountB, msg.sender, params.poolType, params.stakeLPtokens);
+            abi.encode(l2TokenA, l2TokenB, amountA, amountB, msg.sender, params.poolType);
 
         receipt = _lzSend(params.dstEid, payload, _options, MessagingFee(msg.value, 0), payable(msg.sender));
 

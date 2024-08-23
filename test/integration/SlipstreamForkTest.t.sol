@@ -15,11 +15,13 @@ import {IRouter} from "@aerodrome/contracts/contracts/interfaces/IRouter.sol";
 import {IVoter} from "./test_interfaces/IVoter.sol";
 import {StandardBridge} from "./test_interfaces/IStandardBridge.sol";
 import {IUniswapRouter} from "./test_interfaces/IUniswapRouter.sol";
+import {ICLFactory} from "./test_interfaces/ICLFactory.sol";
 
 import {ILayerZeroEndpointV2} from "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/ILayerZeroEndpointV2.sol";
 import {Packet} from "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/ISendLib.sol";
 import {AggregatorV3Interface} from "src/interfaces/AggregatorV3Interface.sol";
-
+import {INonfungiblePositionManager} from "src/interfaces/slipstream/INonfungiblePositionManager.sol";
+import {ICLPool} from "src/interfaces/slipstream/ICLPool.sol";
 contract BaseFork is Test {
     using OptionsBuilder for bytes;
 
@@ -38,24 +40,18 @@ contract BaseFork is Test {
 
 
     ///Migrated tokens
-    ERC20 public constant tokenP = ERC20(DAI); 
-    ERC20 public constant tokenQ = ERC20(USDC); 
+    ERC20 public tokenP = ERC20(WETH); 
+    ERC20 public tokenQ = ERC20(USDC); 
 
     // Set this appropriately based on the pair
-    LiquidityMigration.PoolType public constant poolType = LiquidityMigration.PoolType.BASIC_STABLE;
+    LiquidityMigration.PoolType public poolType = LiquidityMigration.PoolType.CONCENTRATED_VOLATILE;
 
-    ERC20 public constant base_tokenP = ERC20(base_DAI); 
-    ERC20 public constant base_tokenQ = ERC20(base_USDC); 
+    ERC20 public base_tokenP = ERC20(base_WETH); 
+    ERC20 public base_tokenQ = ERC20(base_USDC); 
 
 
-    // ETH CONTRACTS
-    IUniswapV2Factory public constant uniswapV2Factory = IUniswapV2Factory(0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f);
-    IUniswapRouter public constant uniswapV2Router = IUniswapRouter(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
-    IUniswapV3Factory public constant uniswapV3Factory = IUniswapV3Factory(0x1F98431c8aD98523631AE4a59f267346ea31F984);
-    INonfungiblePositionManager public constant nonfungiblePositionManager =
-        INonfungiblePositionManager(0xC36442b4a4522E871399CD717aBDD847Ab11FE88);
     StandardBridge public constant l1StandardBridge = StandardBridge(0x3154Cf16ccdb4C6d922629664174b904d80F2C35); // base l1 standard bridge
-
+    
     address pool;
 
     // BASE CONTRACTS
@@ -65,6 +61,8 @@ contract BaseFork is Test {
     IVoter public constant voter = IVoter(0x16613524e02ad97eDfeF371bC883F2F5d6C480A5);
     StandardBridge public constant l2StandardBridge = StandardBridge(0x4200000000000000000000000000000000000010);
     address public constant l2messenger = 0x4200000000000000000000000000000000000007;
+    ICLFactory clFactory = ICLFactory(0x5e7BB104d84c7CB9B682AaC2F3d509f5F406809A);
+    INonfungiblePositionManager  public constant nftPositionManager = INonfungiblePositionManager(0x827922686190790b37229fd06084350E74485b72);
 
     ERC20 base_pool;
 
@@ -114,12 +112,18 @@ contract BaseFork is Test {
 
         address defaultFactory = aerodromeRouter.defaultFactory();
 
-        base_pool = ERC20(aerodromeRouter.poolFor(
-            address(base_tokenP), 
-            address(base_tokenQ), 
-            poolType == LiquidityMigration.PoolType.BASIC_STABLE, 
-            defaultFactory
-        ));
+        int24 tickSpacing = (poolType == LiquidityMigration.PoolType.CONCENTRATED_STABLE) ? int24(1) : int24(100);
+        if (poolType == LiquidityMigration.PoolType.BASIC_STABLE || poolType == LiquidityMigration.PoolType.BASIC_VOLATILE) {
+            base_pool = ERC20(aerodromeRouter.poolFor(
+                address(base_tokenP), 
+                address(base_tokenQ), 
+                poolType == LiquidityMigration.PoolType.BASIC_STABLE, 
+                defaultFactory
+            ));
+        }
+        else {
+            base_pool = ERC20(clFactory.getPool(address(base_tokenP), address(base_tokenQ), tickSpacing));
+        }
 
         vm.makePersistent(address(base_pool));
 
@@ -139,47 +143,10 @@ contract BaseFork is Test {
             address(aerodromeRouter), swapRouterV3, feeReceiver, MIGRATION_FEE, endpointBase, delegate
         );
 
-        ///////////////
-        // L1 SETUP////
-        ///////////////
-        ethFork = vm.createSelectFork(vm.envString("ETH_RPC"));
-
-        pool = uniswapV2Factory.getPair(address(tokenP), address(tokenQ));
-        if (pool == address(0)) {
-            console.log("The univ2 pool does not exist");
-
-            //////////////////////
-            uint16[3] memory fees = [500, 3000, 10_000];
-            for (uint256 i = 0; i < fees.length; i++) {
-                address tempPool = uniswapV3Factory.getPool(address(tokenP), address(tokenQ), fees[i]);
-                if (tempPool != address(0)) {
-                    pool = tempPool;
-                }
-            }
-            /////////////////////////////
-        }
-        if (pool == address(0)) revert("NO UNIV2 or UNIV3 POOL");
-        vm.makePersistent(pool);
-        user = makeAddr("user");
-
-        liquidityMigration = new LiquidityMigration(
-            endpointMainnet,
-            delegate,
-            address(uniswapV2Factory),
-            address(uniswapV2Router),
-            address(uniswapV3Factory),
-            address(nonfungiblePositionManager),
-            address(l1StandardBridge),
-            address(l2LiquidityManager)
-        );
-
-        vm.prank(delegate);
-        liquidityMigration.setPeer(BASE_EID, bytes32(uint256(uint160(address(l2LiquidityManager)))));
-
         ////////////////
         // L2 CONFIG////
         ////////////////
-        vm.selectFork(baseFork);
+        liquidityMigration = LiquidityMigration(payable(address(1)));
         vm.startPrank(delegate);
         l2LiquidityManager.setPeer(ETH_EID, bytes32(uint256(uint160(address(liquidityMigration)))));
 
@@ -197,7 +164,140 @@ contract BaseFork is Test {
         vm.label(user, "user");
     }
 
+    function test_depositConcentratedLiquidity() public {
+        
+        uint256 amountP;
+        uint256 amountQ;
+
+        if (address(tokenP) == WETH) { // P is WETH, Q is stable
+            amountP = 10 * pDec;
+            amountQ = 30000 * qDec;
+        }
+        else if (address(tokenQ) == WETH) { // Q is WETH, P is stable
+            // P is stable
+            amountP = 25000 * pDec;
+
+            // Q is WETH
+            amountQ = 10 * qDec;
+        }
+        else { // both are stable
+            amountP = 25000 * pDec;
+            amountQ = 25000 * qDec;
+        }
+
+        // migration params
+        LiquidityMigration.MigrationParams memory params = LiquidityMigration.MigrationParams({
+            dstEid: BASE_EID,
+            tokenA: address(tokenP),
+            tokenB: address(tokenQ),
+            l2TokenA: address(base_tokenP),
+            l2TokenB: address(base_tokenQ),
+            liquidity: 0, // not needed for this test
+            tokenId: 0, // not needed for this test
+            amountAMin: 0,
+            amountBMin: 0,
+            deadline: block.timestamp,
+            minGasLimit: 50_000,
+            poolType: poolType
+        });
+
+        vm.store(l2messenger, bytes32(uint256(204)), bytes32(uint256(uint160(address(l1StandardBridge)))));
+        bytes memory messageSent = abi.encode(params.l2TokenA, params.l2TokenB, amountP, amountQ, user, params.poolType);
+
+        address l2TokenA = params.l2TokenA;
+        address l2TokenB = params.l2TokenB;
+        // Set L2 tokens for bridging
+        if (params.l2TokenA == base_WETH) {
+            l2TokenA = address(0);
+        } else if (params.l2TokenB == base_WETH) {
+            l2TokenB = address(0);
+        }
+        // Sanity check for USDC
+        if (params.tokenA == USDC) {
+            l2TokenA = base_USDbC;
+        } else if (params.tokenB == USDC) {
+            l2TokenB = base_USDbC;
+        }
+
+        vm.startPrank(l2messenger);
+        if (address(base_tokenP) == base_WETH) {
+            deal(l2messenger, amountP);
+
+            l2StandardBridge.finalizeBridgeETH{value: amountP}(
+                address(liquidityMigration), address(l2LiquidityManager), amountP, ""
+            );
+        } else {
+            l2StandardBridge.finalizeBridgeERC20(
+                address(l2TokenA),
+                address(tokenP),
+                address(liquidityMigration),
+                address(l2LiquidityManager),
+                amountP,
+                ""
+            );
+        }
+
+        if (address(base_tokenQ) == base_WETH) {
+            deal(l2messenger, amountQ);
+
+            l2StandardBridge.finalizeBridgeETH{value: amountQ}(
+                address(liquidityMigration), address(l2LiquidityManager), amountQ, ""
+            );
+        } else {
+            l2StandardBridge.finalizeBridgeERC20(
+                address(l2TokenB),
+                address(tokenQ),
+                address(liquidityMigration),
+                address(l2LiquidityManager),
+                amountQ,
+                ""
+            );
+        }
+        vm.stopPrank();
+
+        address executor = makeAddr("executor");
+
+        Origin memory origin = Origin(ETH_EID, bytes32(uint256(uint160(address(liquidityMigration)))), 312);
+
+        uint256 tokenPBefore = base_tokenP.balanceOf(user);
+        uint256 tokenQBefore = base_tokenQ.balanceOf(user);
+
+        vm.recordLogs();
+
+        vm.prank(endpointBase);
+        l2LiquidityManager.lzReceive(origin, 0, messageSent, executor, "");
+
+        Vm.Log[] memory entries = vm.getRecordedLogs();
+
+        (, uint256 tokenId) = abi.decode(_getTokenIdMinted(entries), (address, uint256));
+        
+        (uint256 valueIn, uint256 valueOut) =
+            print_results_slipstream(amountP, amountQ, tokenPBefore, tokenQBefore, 0, tokenId, params);
+
+        assertGt(valueOut, valueIn * (10_000 - 50) / 10_000); // allowing 0.5%
+    }
+
     
+    function print_results_slipstream(
+        uint256 amountA,
+        uint256 amountB,
+        uint256 tokenPBefore,
+        uint256 tokenQBefore,
+        uint256 liqBefore,
+        uint256 tokenId,
+        LiquidityMigration.MigrationParams memory params
+    ) internal returns(uint256, uint256) {
+
+        (, , , , ,int24 tickLower, int24 tickUpper , uint128 liquidityProvided, , , , ) = nftPositionManager.positions(tokenId);
+
+        ICLPool basePool = ICLPool(address(base_pool));
+        (uint256 amountAOut, uint256 amountBOut) = basePool.burn(tickLower, tickUpper, liquidityProvided);
+
+        console.log("amountAOut: %e", amountAOut);
+        console.log("amountBOut: %e", amountBOut);
+        return (amountAOut, amountBOut);
+    }
+
     function print_results(
         uint256 amountA,
         uint256 amountB,
@@ -214,7 +314,11 @@ contract BaseFork is Test {
         uint256 tokenPGain = base_tokenP.balanceOf(user) - tokenPBefore;
 
         (uint256 amountAOut, uint256 amountBOut) = aerodromeRouter.quoteRemoveLiquidity(
-            params.l2TokenA, params.l2TokenB, poolType == LiquidityMigration.PoolType.BASIC_STABLE, aerodromeRouter.defaultFactory(), liquidityProvided
+            params.l2TokenA, 
+            params.l2TokenB, 
+            poolType == LiquidityMigration.PoolType.BASIC_STABLE, 
+            aerodromeRouter.defaultFactory(), 
+            liquidityProvided
         );
 
         if (AisTokenP) {
@@ -255,10 +359,10 @@ contract BaseFork is Test {
         }
     }
 
-    function _getBridgeEventData(Vm.Log[] memory entries) internal pure returns (bytes memory) {
+    function _getTokenIdMinted(Vm.Log[] memory entries) internal pure returns (bytes memory) {
         uint256 length = entries.length;
         for (uint256 i = 0; i < length; i++) {
-            if (entries[i].topics[0] == StandardBridge.ERC20BridgeInitiated.selector) {
+            if (entries[i].topics[0] == L2LiquidityManager.NFTPositionMinted.selector) {
                 return entries[i].data;
             }
         }
@@ -276,71 +380,6 @@ interface IUniswapV3Factory {
     function getPool(address tokenA, address tokenB, uint24 fee) external view returns (address pool);
 }
 
-interface INonfungiblePositionManager {
-    struct MintParams {
-        address token0;
-        address token1;
-        uint24 fee;
-        int24 tickLower;
-        int24 tickUpper;
-        uint256 amount0Desired;
-        uint256 amount1Desired;
-        uint256 amount0Min;
-        uint256 amount1Min;
-        address recipient;
-        uint256 deadline;
-    }
-
-    struct IncreaseLiquidityParams {
-        uint256 tokenId;
-        uint256 amount0Desired;
-        uint256 amount1Desired;
-        uint256 amount0Min;
-        uint256 amount1Min;
-        uint256 deadline;
-    }
-
-    struct DecreaseLiquidityParams {
-        uint256 tokenId;
-        uint128 liquidity;
-        uint256 amount0Min;
-        uint256 amount1Min;
-        uint256 deadline;
-    }
-
-    struct CollectParams {
-        uint256 tokenId;
-        address recipient;
-        uint128 amount0Max;
-        uint128 amount1Max;
-    }
-
-    function approve(address to, uint256 tokenId) external;
-
-    function positions(uint256 tokenId)
-        external
-        view
-        returns (
-            uint96 nonce,
-            address operator,
-            address token0,
-            address token1,
-            uint24 fee,
-            int24 tickLower,
-            int24 tickUpper,
-            uint128 liquidity,
-            uint256 feeGrowthInside0LastX128,
-            uint256 feeGrowthInside1LastX128,
-            uint128 tokensOwed0,
-            uint128 tokensOwed1
-        );
-
-    function collect(CollectParams calldata params) external payable returns (uint256 amount0, uint256 amount1);
-
-    function safeTransferFrom(address from, address to, uint256 tokenId) external;
-
-    function ownerOf(uint256 tokenId) external returns (address);
-}
 
 interface IUniswapV2Pair {
     function getReserves() external view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast);
