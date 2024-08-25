@@ -38,7 +38,7 @@ contract V3Test is BaseFork {
         }
 
         //_migrateV3Liquidity(387362); // DAI USDC
-        _migrateV3Liquidity(51061); // DAI USDC (whale)
+        _migrateV3Liquidity(51_061); // DAI USDC (whale)
     }
 
     function _migrateV3Liquidity(uint256 tokenId) internal {
@@ -95,8 +95,7 @@ contract V3Test is BaseFork {
         (,, uint256 amountA, uint256 amountB) =
             abi.decode(_getWithdrawLiquidityData(entries), (address, address, uint256, uint256));
 
-        bytes memory messageSent =
-            abi.encode(params.l2TokenA, params.l2TokenB, amountA, amountB, user, params.poolType);
+        bytes memory messageSent = abi.encode(params.l2TokenA, params.l2TokenB, amountA, amountB, user, params.poolType);
 
         // Now switch to Base
         vm.selectFork(baseFork);

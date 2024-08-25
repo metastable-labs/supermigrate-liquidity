@@ -28,18 +28,17 @@ contract V2Test is BaseFork {
 
         if (address(tokenP) == WETH) {
             deal(address(tokenP), user, 10 * pDec); // 10e18
-            deal(address(tokenQ), user, 30000 * qDec); // 30000e6 USDC
-        }
-        else if (address(tokenQ) == base_WETH) {
+            deal(address(tokenQ), user, 30_000 * qDec); // 30000e6 USDC
+        } else if (address(tokenQ) == base_WETH) {
             // P is stable
-            deal(address(tokenP), user, 25000 * pDec);
+            deal(address(tokenP), user, 25_000 * pDec);
 
             // Q is WETH
             deal(address(tokenQ), user, 10 * qDec);
-        }
-        else { // both not WETH
-            deal(address(tokenP), user, 25000 * pDec);
-            deal(address(tokenQ), user, 25000 * qDec);
+        } else {
+            // both not WETH
+            deal(address(tokenP), user, 25_000 * pDec);
+            deal(address(tokenQ), user, 25_000 * qDec);
         }
 
         deal(user, 1 ether);
@@ -75,10 +74,7 @@ contract V2Test is BaseFork {
         (,, uint256 amountA, uint256 amountB) =
             abi.decode(_getWithdrawLiquidityData(entries), (address, address, uint256, uint256));
 
-       
-
-        bytes memory messageSent =
-            abi.encode(params.l2TokenA, params.l2TokenB, amountA, amountB, user, params.poolType);
+        bytes memory messageSent = abi.encode(params.l2TokenA, params.l2TokenB, amountA, amountB, user, params.poolType);
 
         // Now switch to Base
         vm.selectFork(baseFork);
@@ -162,7 +158,6 @@ contract V2Test is BaseFork {
         L2LiquidityManager.PoolType pType = L2LiquidityManager.PoolType(uint256(poolType));
         l2LiquidityManager._checkPriceRatio(address(base_tokenP), address(base_tokenQ), 100 * pDec, 100 * qDec, pType);
     }
-
 
     function _addV2Liquidity(address _user) internal returns (uint256 lpTokens) {
         vm.startPrank(_user);

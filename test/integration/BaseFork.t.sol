@@ -36,17 +36,15 @@ contract BaseFork is Test {
     address public constant USDT = 0xdAC17F958D2ee523a2206206994597C13D831ec7;
     address public constant base_USDT = 0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2;
 
-
     ///Migrated tokens
-    ERC20 public constant tokenP = ERC20(DAI); 
-    ERC20 public constant tokenQ = ERC20(USDC); 
+    ERC20 public constant tokenP = ERC20(DAI);
+    ERC20 public constant tokenQ = ERC20(USDC);
 
     // Set this appropriately based on the pair
     LiquidityMigration.PoolType public constant poolType = LiquidityMigration.PoolType.BASIC_STABLE;
 
-    ERC20 public constant base_tokenP = ERC20(base_DAI); 
-    ERC20 public constant base_tokenQ = ERC20(base_USDC); 
-
+    ERC20 public constant base_tokenP = ERC20(base_DAI);
+    ERC20 public constant base_tokenQ = ERC20(base_USDC);
 
     // ETH CONTRACTS
     IUniswapV2Factory public constant uniswapV2Factory = IUniswapV2Factory(0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f);
@@ -93,7 +91,6 @@ contract BaseFork is Test {
     uint256 pDec;
     uint256 qDec;
 
-    
     mapping(address => L2LiquidityManager.PriceFeedData) public tokenToPriceFeedData;
 
     function setUp() public {
@@ -102,24 +99,25 @@ contract BaseFork is Test {
         ///////////////
 
         baseFork = vm.createSelectFork(vm.envString("BASE_RPC"));
-        tokenToPriceFeedData[base_USDC] = 
-        L2LiquidityManager.PriceFeedData(AggregatorV3Interface(0x7e860098F58bBFC8648a4311b374B1D669a2bc6B), 86400); // usdc
+        tokenToPriceFeedData[base_USDC] =
+            L2LiquidityManager.PriceFeedData(AggregatorV3Interface(0x7e860098F58bBFC8648a4311b374B1D669a2bc6B), 86_400); // usdc
 
-        tokenToPriceFeedData[base_WETH] = 
-        L2LiquidityManager.PriceFeedData(AggregatorV3Interface(0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70), 1200); // weth
+        tokenToPriceFeedData[base_WETH] =
+            L2LiquidityManager.PriceFeedData(AggregatorV3Interface(0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70), 1200); // weth
 
-        tokenToPriceFeedData[base_DAI] =  
-        L2LiquidityManager.PriceFeedData(AggregatorV3Interface(0x591e79239a7d679378eC8c847e5038150364C78F), 86400); // dai
-
+        tokenToPriceFeedData[base_DAI] =
+            L2LiquidityManager.PriceFeedData(AggregatorV3Interface(0x591e79239a7d679378eC8c847e5038150364C78F), 86_400); // dai
 
         address defaultFactory = aerodromeRouter.defaultFactory();
 
-        base_pool = ERC20(aerodromeRouter.poolFor(
-            address(base_tokenP), 
-            address(base_tokenQ), 
-            poolType == LiquidityMigration.PoolType.BASIC_STABLE, 
-            defaultFactory
-        ));
+        base_pool = ERC20(
+            aerodromeRouter.poolFor(
+                address(base_tokenP),
+                address(base_tokenQ),
+                poolType == LiquidityMigration.PoolType.BASIC_STABLE,
+                defaultFactory
+            )
+        );
 
         vm.makePersistent(address(base_pool));
 
@@ -183,13 +181,14 @@ contract BaseFork is Test {
         vm.startPrank(delegate);
         l2LiquidityManager.setPeer(ETH_EID, bytes32(uint256(uint160(address(liquidityMigration)))));
 
-
         L2LiquidityManager.PriceFeedData memory a = tokenToPriceFeedData[address(base_tokenP)];
-        L2LiquidityManager.PriceFeedData memory b =  tokenToPriceFeedData[address(base_tokenQ)];
+        L2LiquidityManager.PriceFeedData memory b = tokenToPriceFeedData[address(base_tokenQ)];
 
         L2LiquidityManager.PoolType pType = L2LiquidityManager.PoolType(uint256(poolType));
 
-        l2LiquidityManager.setPool(address(base_tokenP), address(base_tokenQ), pType, address(base_pool), base_gauge, a, b);
+        l2LiquidityManager.setPool(
+            address(base_tokenP), address(base_tokenQ), pType, address(base_pool), base_gauge, a, b
+        );
 
         vm.stopPrank();
 
@@ -197,7 +196,6 @@ contract BaseFork is Test {
         vm.label(user, "user");
     }
 
-    
     function print_results(
         uint256 amountA,
         uint256 amountB,
@@ -214,7 +212,11 @@ contract BaseFork is Test {
         uint256 tokenPGain = base_tokenP.balanceOf(user) - tokenPBefore;
 
         (uint256 amountAOut, uint256 amountBOut) = aerodromeRouter.quoteRemoveLiquidity(
-            params.l2TokenA, params.l2TokenB, poolType == LiquidityMigration.PoolType.BASIC_STABLE, aerodromeRouter.defaultFactory(), liquidityProvided
+            params.l2TokenA,
+            params.l2TokenB,
+            poolType == LiquidityMigration.PoolType.BASIC_STABLE,
+            aerodromeRouter.defaultFactory(),
+            liquidityProvided
         );
 
         if (AisTokenP) {
@@ -241,7 +243,6 @@ contract BaseFork is Test {
 
         console.log("valueIn: %e (%s)", valueIn, IERC20Metadata(params.l2TokenB).symbol());
         console.log("valueOut: %e (%s)", valueOut, IERC20Metadata(params.l2TokenB).symbol());
-
 
         return (valueIn, valueOut);
     }

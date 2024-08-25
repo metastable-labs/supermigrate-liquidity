@@ -22,6 +22,7 @@ import {Packet} from "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/ISe
 import {AggregatorV3Interface} from "src/interfaces/AggregatorV3Interface.sol";
 import {INonfungiblePositionManager} from "src/interfaces/slipstream/INonfungiblePositionManager.sol";
 import {ICLPool} from "src/interfaces/slipstream/ICLPool.sol";
+
 contract BaseFork is Test {
     using OptionsBuilder for bytes;
 
@@ -38,20 +39,18 @@ contract BaseFork is Test {
     address public constant USDT = 0xdAC17F958D2ee523a2206206994597C13D831ec7;
     address public constant base_USDT = 0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2;
 
-
     ///Migrated tokens
-    ERC20 public tokenP = ERC20(WETH); 
-    ERC20 public tokenQ = ERC20(USDC); 
+    ERC20 public tokenP = ERC20(WETH);
+    ERC20 public tokenQ = ERC20(USDC);
 
     // Set this appropriately based on the pair
     LiquidityMigration.PoolType public poolType = LiquidityMigration.PoolType.CONCENTRATED_VOLATILE;
 
-    ERC20 public base_tokenP = ERC20(base_WETH); 
-    ERC20 public base_tokenQ = ERC20(base_USDC); 
-
+    ERC20 public base_tokenP = ERC20(base_WETH);
+    ERC20 public base_tokenQ = ERC20(base_USDC);
 
     StandardBridge public constant l1StandardBridge = StandardBridge(0x3154Cf16ccdb4C6d922629664174b904d80F2C35); // base l1 standard bridge
-    
+
     address pool;
 
     // BASE CONTRACTS
@@ -62,7 +61,8 @@ contract BaseFork is Test {
     StandardBridge public constant l2StandardBridge = StandardBridge(0x4200000000000000000000000000000000000010);
     address public constant l2messenger = 0x4200000000000000000000000000000000000007;
     ICLFactory clFactory = ICLFactory(0x5e7BB104d84c7CB9B682AaC2F3d509f5F406809A);
-    INonfungiblePositionManager  public constant nftPositionManager = INonfungiblePositionManager(0x827922686190790b37229fd06084350E74485b72);
+    INonfungiblePositionManager public constant nftPositionManager =
+        INonfungiblePositionManager(0x827922686190790b37229fd06084350E74485b72);
 
     ERC20 base_pool;
 
@@ -91,7 +91,6 @@ contract BaseFork is Test {
     uint256 pDec;
     uint256 qDec;
 
-    
     mapping(address => L2LiquidityManager.PriceFeedData) public tokenToPriceFeedData;
 
     function setUp() public {
@@ -100,28 +99,31 @@ contract BaseFork is Test {
         ///////////////
 
         baseFork = vm.createSelectFork(vm.envString("BASE_RPC"));
-        tokenToPriceFeedData[base_USDC] = 
-        L2LiquidityManager.PriceFeedData(AggregatorV3Interface(0x7e860098F58bBFC8648a4311b374B1D669a2bc6B), 86400); // usdc
+        tokenToPriceFeedData[base_USDC] =
+            L2LiquidityManager.PriceFeedData(AggregatorV3Interface(0x7e860098F58bBFC8648a4311b374B1D669a2bc6B), 86_400); // usdc
 
-        tokenToPriceFeedData[base_WETH] = 
-        L2LiquidityManager.PriceFeedData(AggregatorV3Interface(0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70), 1200); // weth
+        tokenToPriceFeedData[base_WETH] =
+            L2LiquidityManager.PriceFeedData(AggregatorV3Interface(0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70), 1200); // weth
 
-        tokenToPriceFeedData[base_DAI] =  
-        L2LiquidityManager.PriceFeedData(AggregatorV3Interface(0x591e79239a7d679378eC8c847e5038150364C78F), 86400); // dai
-
+        tokenToPriceFeedData[base_DAI] =
+            L2LiquidityManager.PriceFeedData(AggregatorV3Interface(0x591e79239a7d679378eC8c847e5038150364C78F), 86_400); // dai
 
         address defaultFactory = aerodromeRouter.defaultFactory();
 
         int24 tickSpacing = (poolType == LiquidityMigration.PoolType.CONCENTRATED_STABLE) ? int24(1) : int24(100);
-        if (poolType == LiquidityMigration.PoolType.BASIC_STABLE || poolType == LiquidityMigration.PoolType.BASIC_VOLATILE) {
-            base_pool = ERC20(aerodromeRouter.poolFor(
-                address(base_tokenP), 
-                address(base_tokenQ), 
-                poolType == LiquidityMigration.PoolType.BASIC_STABLE, 
-                defaultFactory
-            ));
-        }
-        else {
+        if (
+            poolType == LiquidityMigration.PoolType.BASIC_STABLE
+                || poolType == LiquidityMigration.PoolType.BASIC_VOLATILE
+        ) {
+            base_pool = ERC20(
+                aerodromeRouter.poolFor(
+                    address(base_tokenP),
+                    address(base_tokenQ),
+                    poolType == LiquidityMigration.PoolType.BASIC_STABLE,
+                    defaultFactory
+                )
+            );
+        } else {
             base_pool = ERC20(clFactory.getPool(address(base_tokenP), address(base_tokenQ), tickSpacing));
         }
 
@@ -150,13 +152,14 @@ contract BaseFork is Test {
         vm.startPrank(delegate);
         l2LiquidityManager.setPeer(ETH_EID, bytes32(uint256(uint160(address(liquidityMigration)))));
 
-
         L2LiquidityManager.PriceFeedData memory a = tokenToPriceFeedData[address(base_tokenP)];
-        L2LiquidityManager.PriceFeedData memory b =  tokenToPriceFeedData[address(base_tokenQ)];
+        L2LiquidityManager.PriceFeedData memory b = tokenToPriceFeedData[address(base_tokenQ)];
 
         L2LiquidityManager.PoolType pType = L2LiquidityManager.PoolType(uint256(poolType));
 
-        l2LiquidityManager.setPool(address(base_tokenP), address(base_tokenQ), pType, address(base_pool), base_gauge, a, b);
+        l2LiquidityManager.setPool(
+            address(base_tokenP), address(base_tokenQ), pType, address(base_pool), base_gauge, a, b
+        );
 
         vm.stopPrank();
 
@@ -165,24 +168,24 @@ contract BaseFork is Test {
     }
 
     function test_depositConcentratedLiquidity() public {
-        
         uint256 amountP;
         uint256 amountQ;
 
-        if (address(tokenP) == WETH) { // P is WETH, Q is stable
+        if (address(tokenP) == WETH) {
+            // P is WETH, Q is stable
             amountP = 10 * pDec;
-            amountQ = 30000 * qDec;
-        }
-        else if (address(tokenQ) == WETH) { // Q is WETH, P is stable
+            amountQ = 30_000 * qDec;
+        } else if (address(tokenQ) == WETH) {
+            // Q is WETH, P is stable
             // P is stable
-            amountP = 25000 * pDec;
+            amountP = 25_000 * pDec;
 
             // Q is WETH
             amountQ = 10 * qDec;
-        }
-        else { // both are stable
-            amountP = 25000 * pDec;
-            amountQ = 25000 * qDec;
+        } else {
+            // both are stable
+            amountP = 25_000 * pDec;
+            amountQ = 25_000 * qDec;
         }
 
         // migration params
@@ -270,14 +273,13 @@ contract BaseFork is Test {
         Vm.Log[] memory entries = vm.getRecordedLogs();
 
         (, uint256 tokenId) = abi.decode(_getTokenIdMinted(entries), (address, uint256));
-        
+
         (uint256 valueIn, uint256 valueOut) =
             print_results_slipstream(amountP, amountQ, tokenPBefore, tokenQBefore, 0, tokenId, params);
 
         assertGt(valueOut, valueIn * (10_000 - 50) / 10_000); // allowing 0.5%
     }
 
-    
     function print_results_slipstream(
         uint256 amountA,
         uint256 amountB,
@@ -286,9 +288,8 @@ contract BaseFork is Test {
         uint256 liqBefore,
         uint256 tokenId,
         LiquidityMigration.MigrationParams memory params
-    ) internal returns(uint256, uint256) {
-
-        (, , , , ,int24 tickLower, int24 tickUpper , uint128 liquidityProvided, , , , ) = nftPositionManager.positions(tokenId);
+    ) internal returns (uint256, uint256) {
+        (,,,,, int24 tickLower, int24 tickUpper, uint128 liquidityProvided,,,,) = nftPositionManager.positions(tokenId);
 
         ICLPool basePool = ICLPool(address(base_pool));
         (uint256 amountAOut, uint256 amountBOut) = basePool.burn(tickLower, tickUpper, liquidityProvided);
@@ -314,10 +315,10 @@ contract BaseFork is Test {
         uint256 tokenPGain = base_tokenP.balanceOf(user) - tokenPBefore;
 
         (uint256 amountAOut, uint256 amountBOut) = aerodromeRouter.quoteRemoveLiquidity(
-            params.l2TokenA, 
-            params.l2TokenB, 
-            poolType == LiquidityMigration.PoolType.BASIC_STABLE, 
-            aerodromeRouter.defaultFactory(), 
+            params.l2TokenA,
+            params.l2TokenB,
+            poolType == LiquidityMigration.PoolType.BASIC_STABLE,
+            aerodromeRouter.defaultFactory(),
             liquidityProvided
         );
 
@@ -345,7 +346,6 @@ contract BaseFork is Test {
 
         console.log("valueIn: %e (%s)", valueIn, IERC20Metadata(params.l2TokenB).symbol());
         console.log("valueOut: %e (%s)", valueOut, IERC20Metadata(params.l2TokenB).symbol());
-
 
         return (valueIn, valueOut);
     }
@@ -379,7 +379,6 @@ interface IUniswapV2Factory {
 interface IUniswapV3Factory {
     function getPool(address tokenA, address tokenB, uint24 fee) external view returns (address pool);
 }
-
 
 interface IUniswapV2Pair {
     function getReserves() external view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast);

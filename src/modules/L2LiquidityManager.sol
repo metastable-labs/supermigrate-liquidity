@@ -21,6 +21,7 @@ import {console} from "forge-std/console.sol";
  * @dev Manages liquidity on L2, interacting with Aerodrome to deposit liquidity,
  * stake LP tokens, and handle cross-chain liquidity migrations.
  */
+
 contract L2LiquidityManager is OApp {
     IRouter public aerodromeRouter;
     ISwapRouterV3 public swapRouterV3;
@@ -37,10 +38,8 @@ contract L2LiquidityManager is OApp {
     /// @dev 10 ** 27
     uint256 public constant RAY = 1e27;
 
-    address public constant BASE_USDC =
-        0xd9aAEc86B65D86f6A7B5B1b0c42FFA531710b6CA;
-    address public constant NORMAL_USDC =
-        0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
+    address public constant BASE_USDC = 0xd9aAEc86B65D86f6A7B5B1b0c42FFA531710b6CA;
+    address public constant NORMAL_USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
     address public constant WETH = 0x4200000000000000000000000000000000000006;
 
     INonfungiblePositionManager public constant nftPositionManager =
@@ -75,29 +74,13 @@ contract L2LiquidityManager is OApp {
     mapping(address => PriceFeedData) public tokenToPriceFeedData;
 
     event LiquidityDeposited(
-        address user,
-        address token0,
-        address token1,
-        uint256 amount0,
-        uint256 amount1,
-        uint256 lpTokens
+        address user, address token0, address token1, uint256 amount0, uint256 amount1, uint256 lpTokens
     );
     event PoolSet(address tokenA, address tokenB, address pool, address gauge);
-    event LPTokensStaked(
-        address user,
-        address pool,
-        address gauge,
-        uint256 amount
-    );
+    event LPTokensStaked(address user, address pool, address gauge, uint256 amount);
     event LPTokensWithdrawn(address user, address pool, uint256 amount);
     event AeroEmissionsClaimed(address user, address pool, address gauge);
-    event CrossChainLiquidityReceived(
-        address user,
-        address tokenA,
-        address tokenB,
-        uint256 amountA,
-        uint256 amountB
-    );
+    event CrossChainLiquidityReceived(address user, address tokenA, address tokenB, uint256 amountA, uint256 amountB);
     event TrustedRemoteSet(uint32 indexed srcEid, bytes srcAddress);
     event NFTPositionMinted(address indexed user, uint256 tokenId);
 
@@ -149,11 +132,7 @@ contract L2LiquidityManager is OApp {
         PriceFeedData memory feedB
     ) external onlyOwner {
         require(
-            tokenA != address(0) &&
-                tokenB != address(0) &&
-                tokenA != tokenB &&
-                pool != address(0),
-            "Invalid addresses"
+            tokenA != address(0) && tokenB != address(0) && tokenA != tokenB && pool != address(0), "Invalid addresses"
         );
 
         PoolData memory poolData = PoolData(pool, gauge, poolType);
@@ -176,11 +155,7 @@ contract L2LiquidityManager is OApp {
         emit PoolSet(tokenA, tokenB, pool, gauge);
     }
 
-    function getPoolKey(
-        address tokenA,
-        address tokenB,
-        PoolType poolType
-    ) public view returns (bytes32) {
+    function getPoolKey(address tokenA, address tokenB, PoolType poolType) public view returns (bytes32) {
         require(tokenA != tokenB);
 
         if (uint160(tokenA) < uint160(tokenB)) {
@@ -207,10 +182,7 @@ contract L2LiquidityManager is OApp {
      * @return pool Address of the pool
      * @return gauge Address of the gauge
      */
-    function getPool(
-        address tokenA,
-        address tokenB
-    ) external view returns (address pool, address gauge) {
+    function getPool(address tokenA, address tokenB) external view returns (address pool, address gauge) {
         PoolData memory poolData = tokenPairToPools[tokenA][tokenB];
         return (poolData.poolAddress, poolData.gaugeAddress);
     }
@@ -231,10 +203,11 @@ contract L2LiquidityManager is OApp {
      * @return pools Array of pool addresses
      * @return gauges Array of corresponding gauge addresses
      */
-    function getPools(
-        uint256 start,
-        uint256 end
-    ) external view returns (address[] memory pools, address[] memory gauges) {
+    function getPools(uint256 start, uint256 end)
+        external
+        view
+        returns (address[] memory pools, address[] memory gauges)
+    {
         require(start < end, "Invalid range");
         require(end <= allPools.length, "End out of bounds");
 
@@ -256,19 +229,14 @@ contract L2LiquidityManager is OApp {
      * @param token Address of the token
      * @return uint256 Liquidity amount
      */
-    function getUserLiquidity(
-        address user,
-        address token
-    ) external view returns (uint256) {
+    function getUserLiquidity(address user, address token) external view returns (uint256) {
         return userLiquidity[user][token];
     }
 
     /// @notice Retrieves the NFT positions of a user
     /// @param user The address of the user
     /// @return An array of token IDs representing the user's NFT positions
-    function getUserNFTPositions(
-        address user
-    ) external view returns (uint256[] memory) {
+    function getUserNFTPositions(address user) external view returns (uint256[] memory) {
         return userNFTPositions[user];
     }
 
@@ -278,10 +246,7 @@ contract L2LiquidityManager is OApp {
      * @param pool Address of the pool
      * @return uint256 Staked LP token amount
      */
-    function getUserStakedLP(
-        address user,
-        address pool
-    ) external view returns (uint256) {
+    function getUserStakedLP(address user, address pool) external view returns (uint256) {
         return userStakedLPTokens[user][pool];
     }
 
@@ -291,13 +256,9 @@ contract L2LiquidityManager is OApp {
      * @param amount Amount to deduct fee from
      * @return uint256 Amount after fee deduction
      */
-    function deductFee(
-        address token,
-        uint256 amount
-    ) private returns (uint256) {
+    function deductFee(address token, uint256 amount) private returns (uint256) {
         uint256 precisionFactor = WAD;
-        uint256 feeAmount = (amount * migrationFee * precisionFactor) /
-            FEE_DENOMINATOR;
+        uint256 feeAmount = (amount * migrationFee * precisionFactor) / FEE_DENOMINATOR;
         feeAmount = (feeAmount + precisionFactor - 1) / precisionFactor;
         if (feeAmount > 0) {
             IERC20(token).transfer(feeReceiver, feeAmount);
@@ -324,9 +285,7 @@ contract L2LiquidityManager is OApp {
         PoolType poolType,
         address user
     ) internal returns (uint256) {
-        PoolData memory poolData = poolKeyToPoolData[
-            getPoolKey(tokenA, tokenB, poolType)
-        ];
+        PoolData memory poolData = poolKeyToPoolData[getPoolKey(tokenA, tokenB, poolType)];
         require(poolData.poolAddress != address(0), "Pool does not exist");
 
         // Wrap ETH to WETH if necessary
@@ -337,29 +296,10 @@ contract L2LiquidityManager is OApp {
             IWETH(WETH).deposit{value: amountB}();
         }
 
-        if (
-            poolType == PoolType.CONCENTRATED_STABLE ||
-            poolType == PoolType.CONCENTRATED_VOLATILE
-        ) {
-            return
-                _depositConcentratedLiquidity(
-                    tokenA,
-                    tokenB,
-                    amountA,
-                    amountB,
-                    poolData,
-                    user
-                );
+        if (poolType == PoolType.CONCENTRATED_STABLE || poolType == PoolType.CONCENTRATED_VOLATILE) {
+            return _depositConcentratedLiquidity(tokenA, tokenB, amountA, amountB, poolData, user);
         } else {
-            return
-                _depositBasicLiquidity(
-                    tokenA,
-                    tokenB,
-                    amountA,
-                    amountB,
-                    poolType,
-                    user
-                );
+            return _depositBasicLiquidity(tokenA, tokenB, amountA, amountB, poolType, user);
         }
     }
 
@@ -399,13 +339,7 @@ contract L2LiquidityManager is OApp {
         _checkPriceRatio(tokenA, tokenB, amountA, amountB, poolType);
 
         // Balance token ratio before depositing
-        (uint256[] memory amounts, bool sellTokenA) = _balanceTokenRatio(
-            tokenA,
-            tokenB,
-            amountA,
-            amountB,
-            stable
-        );
+        (uint256[] memory amounts, bool sellTokenA) = _balanceTokenRatio(tokenA, tokenB, amountA, amountB, stable);
 
         // Update token amounts after swaps
         if (sellTokenA) {
@@ -423,34 +357,14 @@ contract L2LiquidityManager is OApp {
         uint256 amountAMin;
         uint256 amountBMin;
         if (!stable) {
-            amountAMin = mulDiv(
-                amountA,
-                FEE_DENOMINATOR - LIQ_SLIPPAGE,
-                FEE_DENOMINATOR
-            );
-            amountBMin = mulDiv(
-                amountB,
-                FEE_DENOMINATOR - LIQ_SLIPPAGE,
-                FEE_DENOMINATOR
-            );
+            amountAMin = mulDiv(amountA, FEE_DENOMINATOR - LIQ_SLIPPAGE, FEE_DENOMINATOR);
+            amountBMin = mulDiv(amountB, FEE_DENOMINATOR - LIQ_SLIPPAGE, FEE_DENOMINATOR);
         }
 
         // Add liquidity to the basic pool
-        (
-            uint256 amountAOut,
-            uint256 amountBOut,
-            uint256 liquidity
-        ) = aerodromeRouter.addLiquidity(
-                tokenA,
-                tokenB,
-                stable,
-                amountA,
-                amountB,
-                amountAMin,
-                amountBMin,
-                address(this),
-                block.timestamp
-            );
+        (uint256 amountAOut, uint256 amountBOut, uint256 liquidity) = aerodromeRouter.addLiquidity(
+            tokenA, tokenB, stable, amountA, amountB, amountAMin, amountBMin, address(this), block.timestamp
+        );
 
         uint256 leftoverA = amountA - amountAOut;
         uint256 leftoverB = amountB - amountBOut;
@@ -461,29 +375,18 @@ contract L2LiquidityManager is OApp {
         userLiquidity[user][tokenA] += amountAOut;
         userLiquidity[user][tokenB] += amountBOut;
 
-        emit LiquidityDeposited(
-            user,
-            tokenA,
-            tokenB,
-            amountAOut,
-            amountBOut,
-            liquidity
-        );
+        emit LiquidityDeposited(user, tokenA, tokenB, amountAOut, amountBOut, liquidity);
 
         return liquidity;
     }
 
-    function _returnLeftovers(
-        address tokenA,
-        address tokenB,
-        uint256 leftoverA,
-        uint256 leftoverB,
-        address user
-    ) internal {
+    function _returnLeftovers(address tokenA, address tokenB, uint256 leftoverA, uint256 leftoverB, address user)
+        internal
+    {
         if (leftoverA > 0) {
             if (tokenA == WETH) {
                 IWETH(WETH).withdraw(leftoverA);
-                (bool success, ) = user.call{value: leftoverA}("");
+                (bool success,) = user.call{value: leftoverA}("");
                 require(success, "ETH transfer failed");
             } else {
                 IERC20(tokenA).transfer(user, leftoverA);
@@ -492,7 +395,7 @@ contract L2LiquidityManager is OApp {
         if (leftoverB > 0) {
             if (tokenB == WETH) {
                 IWETH(WETH).withdraw(leftoverB);
-                (bool success, ) = user.call{value: leftoverB}("");
+                (bool success,) = user.call{value: leftoverB}("");
                 require(success, "ETH transfer failed");
             } else {
                 IERC20(tokenB).transfer(user, leftoverB);
@@ -530,37 +433,24 @@ contract L2LiquidityManager is OApp {
         (int24 lowerTick, int24 upperTick) = _calculateOptimalTickRange(pool);
 
         // Calculate the liquidity amount
-        uint128 liquidityAmount = _calculateLiquidityAmount(
-            tokenA,
-            tokenB,
-            amountA,
-            amountB,
-            lowerTick,
-            upperTick
-        );
+        uint128 liquidityAmount = _calculateLiquidityAmount(tokenA, tokenB, amountA, amountB, lowerTick, upperTick);
 
-        INonfungiblePositionManager.MintParams
-            memory params = INonfungiblePositionManager.MintParams({
-                token0: tokenA,
-                token1: tokenB,
-                tickSpacing: 2,
-                tickLower: 5,
-                tickUpper: 10,
-                amount0Desired: amountA,
-                amount1Desired: amountB,
-                amount0Min: 0,
-                amount1Min: 0,
-                recipient: address(this),
-                deadline: block.timestamp,
-                sqrtPriceX96: 5
-            });
+        INonfungiblePositionManager.MintParams memory params = INonfungiblePositionManager.MintParams({
+            token0: tokenA,
+            token1: tokenB,
+            tickSpacing: 2,
+            tickLower: 5,
+            tickUpper: 10,
+            amount0Desired: amountA,
+            amount1Desired: amountB,
+            amount0Min: 0,
+            amount1Min: 0,
+            recipient: address(this),
+            deadline: block.timestamp,
+            sqrtPriceX96: 5
+        });
 
-        (
-            uint256 tokenId,
-            uint128 liquidity,
-            uint256 amount0,
-            uint256 amount1
-        ) = nftPositionManager.mint(params);
+        (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1) = nftPositionManager.mint(params);
 
         // Transfer the NFT to the user
         _transferNFTToUser(tokenId, user);
@@ -569,38 +459,24 @@ contract L2LiquidityManager is OApp {
         userLiquidity[user][tokenA] += amount0;
         userLiquidity[user][tokenB] += amount1;
 
-        emit LiquidityDeposited(
-            user,
-            tokenA,
-            tokenB,
-            amount0,
-            amount1,
-            liquidity
-        );
+        emit LiquidityDeposited(user, tokenA, tokenB, amount0, amount1, liquidity);
         emit NFTPositionMinted(user, tokenId);
 
         return liquidity;
     }
 
-    function _balanceTokenRatio(
-        address tokenA,
-        address tokenB,
-        uint256 amountA,
-        uint256 amountB,
-        bool stable
-    ) internal returns (uint256[] memory, bool) {
+    function _balanceTokenRatio(address tokenA, address tokenB, uint256 amountA, uint256 amountB, bool stable)
+        internal
+        returns (uint256[] memory, bool)
+    {
         uint256 aDecMultiplier = 10 ** (18 - IERC20Metadata(tokenA).decimals());
         uint256 bDecMultiplier = 10 ** (18 - IERC20Metadata(tokenB).decimals());
 
         uint256 tokensToSell;
         uint256 amountOutMin;
 
-        (uint256 reserveA, uint256 reserveB) = aerodromeRouter.getReserves(
-            tokenA,
-            tokenB,
-            stable,
-            aerodromeRouter.defaultFactory()
-        );
+        (uint256 reserveA, uint256 reserveB) =
+            aerodromeRouter.getReserves(tokenA, tokenB, stable, aerodromeRouter.defaultFactory());
 
         uint256 x = (reserveA);
         uint256 y = (reserveB);
@@ -621,30 +497,14 @@ contract L2LiquidityManager is OApp {
         if (!stable) {
             if (!sellTokenA) {
                 // Sell token B
-                tokensToSell =
-                    _calculateAmountIn(
-                        y,
-                        x,
-                        b,
-                        a,
-                        bDecMultiplier,
-                        aDecMultiplier
-                    ) /
-                    bDecMultiplier;
+                tokensToSell = _calculateAmountIn(y, x, b, a, bDecMultiplier, aDecMultiplier) / bDecMultiplier;
 
                 uint256 amtToReceive = _calculateAmountOut(tokensToSell, y, x);
 
                 amountOutMin = (amtToReceive * 9999) / 10_000; // allow for 1bip of error
             } else {
                 // Sell token A
-                tokensToSell = _calculateAmountIn(
-                    x,
-                    y,
-                    a,
-                    b,
-                    aDecMultiplier,
-                    bDecMultiplier
-                );
+                tokensToSell = _calculateAmountIn(x, y, a, b, aDecMultiplier, bDecMultiplier);
                 sellTokenA = true;
 
                 uint256 amtToReceive = _calculateAmountOut(tokensToSell, x, y);
@@ -678,24 +538,13 @@ contract L2LiquidityManager is OApp {
 
         IRouter.Route[] memory routes = new IRouter.Route[](1);
         routes[0] = IRouter.Route(
-            sellTokenA ? tokenA : tokenB,
-            sellTokenA ? tokenB : tokenA,
-            stable,
-            aerodromeRouter.defaultFactory()
+            sellTokenA ? tokenA : tokenB, sellTokenA ? tokenB : tokenA, stable, aerodromeRouter.defaultFactory()
         );
 
-        IERC20(sellTokenA ? tokenA : tokenB).approve(
-            address(aerodromeRouter),
-            tokensToSell
-        );
+        IERC20(sellTokenA ? tokenA : tokenB).approve(address(aerodromeRouter), tokensToSell);
 
-        uint256[] memory amounts = aerodromeRouter.swapExactTokensForTokens(
-            tokensToSell,
-            amountOutMin,
-            routes,
-            address(this),
-            block.timestamp
-        );
+        uint256[] memory amounts =
+            aerodromeRouter.swapExactTokensForTokens(tokensToSell, amountOutMin, routes, address(this), block.timestamp);
         return (amounts, sellTokenA);
     }
 
@@ -708,14 +557,11 @@ contract L2LiquidityManager is OApp {
      * @param aDec 10 ** (18 - tokenA.decimals())
      * @param bDec 10 ** (18 - tokenB.decimals())
      */
-    function _calculateAmountIn(
-        uint256 x,
-        uint256 y,
-        uint256 a,
-        uint256 b,
-        uint256 aDec,
-        uint256 bDec
-    ) internal pure returns (uint256) {
+    function _calculateAmountIn(uint256 x, uint256 y, uint256 a, uint256 b, uint256 aDec, uint256 bDec)
+        internal
+        pure
+        returns (uint256)
+    {
         // Normalize to 18 decimals
         x = x * aDec;
         a = a * aDec;
@@ -729,8 +575,7 @@ contract L2LiquidityManager is OApp {
         uint256 ay = (y * a) / WAD;
 
         // Compute the square root term
-        uint256 innerTerm = (xy + bx) *
-            (3_988_009 * xy + 9 * bx + 3_988_000 * ay);
+        uint256 innerTerm = (xy + bx) * (3_988_009 * xy + 9 * bx + 3_988_000 * ay);
         uint256 sqrtTerm = Babylonian.sqrt(innerTerm);
 
         // Compute the numerator
@@ -745,13 +590,12 @@ contract L2LiquidityManager is OApp {
         return amountIn / aDec;
     }
 
-    function _calculateAmountOut(
-        uint256 amountIn,
-        uint256 reserveIn,
-        uint256 reserveOut
-    ) internal pure returns (uint256) {
-        return
-            (reserveOut * 997 * amountIn) / (1000 * reserveIn + 997 * amountIn);
+    function _calculateAmountOut(uint256 amountIn, uint256 reserveIn, uint256 reserveOut)
+        internal
+        pure
+        returns (uint256)
+    {
+        return (reserveOut * 997 * amountIn) / (1000 * reserveIn + 997 * amountIn);
     }
 
     /**
@@ -759,26 +603,19 @@ contract L2LiquidityManager is OApp {
      * @param amount Amount of Base USDC to swap
      * @return uint256 Amount of normal USDC received
      */
-    function _swapBaseUSDCToNormalUSDC(
-        uint256 amount
-    ) internal returns (uint256) {
+    function _swapBaseUSDCToNormalUSDC(uint256 amount) internal returns (uint256) {
         IERC20(BASE_USDC).approve(address(swapRouterV3), amount);
 
-        ISwapRouterV3.ExactInputSingleParams memory params = ISwapRouterV3
-            .ExactInputSingleParams({
-                tokenIn: BASE_USDC,
-                tokenOut: NORMAL_USDC,
-                tickSpacing: 1,
-                recipient: address(this),
-                deadline: block.timestamp,
-                amountIn: amount,
-                amountOutMinimum: mulDiv(
-                    amount,
-                    FEE_DENOMINATOR - LIQ_SLIPPAGE,
-                    FEE_DENOMINATOR
-                ),
-                sqrtPriceLimitX96: 0
-            });
+        ISwapRouterV3.ExactInputSingleParams memory params = ISwapRouterV3.ExactInputSingleParams({
+            tokenIn: BASE_USDC,
+            tokenOut: NORMAL_USDC,
+            tickSpacing: 1,
+            recipient: address(this),
+            deadline: block.timestamp,
+            amountIn: amount,
+            amountOutMinimum: mulDiv(amount, FEE_DENOMINATOR - LIQ_SLIPPAGE, FEE_DENOMINATOR),
+            sqrtPriceLimitX96: 0
+        });
 
         uint256 amountOut = swapRouterV3.exactInputSingle(params);
         return amountOut;
@@ -789,10 +626,8 @@ contract L2LiquidityManager is OApp {
     /// @param pool The concentrated liquidity pool interface
     /// @return lowerTick The calculated lower tick
     /// @return upperTick The calculated upper tick
-    function _calculateOptimalTickRange(
-        ICLPool pool
-    ) internal view returns (int24 lowerTick, int24 upperTick) {
-        (, int24 currentTick, , , , ) = pool.slot0();
+    function _calculateOptimalTickRange(ICLPool pool) internal view returns (int24 lowerTick, int24 upperTick) {
+        (, int24 currentTick,,,,) = pool.slot0();
 
         // Define a price range of ±10% around the current price
         int24 tickSpacing = pool.tickSpacing(); // Assuming a tick spacing of 60
@@ -839,81 +674,46 @@ contract L2LiquidityManager is OApp {
     /// @notice Gets price by combining two price feeds
     /// @dev Both feeds must have price denominated in USD
     /// @dev Returns the price of A denominated in B, after adjusting both to 18 decimals
-    function _combinePriceFeeds(
-        address tokenA,
-        address tokenB
-    ) public view returns (uint256) {
+    function _combinePriceFeeds(address tokenA, address tokenB) public view returns (uint256) {
         PriceFeedData memory priceFeedA = tokenToPriceFeedData[tokenA];
         PriceFeedData memory priceFeedB = tokenToPriceFeedData[tokenB];
 
-        (, int256 priceA_int, , uint256 updatedAtA, ) = priceFeedA
-            .feed
-            .latestRoundData();
-        (, int256 priceB_int, , uint256 updatedAtB, ) = priceFeedB
-            .feed
-            .latestRoundData();
+        (, int256 priceA_int,, uint256 updatedAtA,) = priceFeedA.feed.latestRoundData();
+        (, int256 priceB_int,, uint256 updatedAtB,) = priceFeedB.feed.latestRoundData();
 
         require(priceA_int > 0 && priceB_int > 0, "Invalid price");
-        require(
-            updatedAtA >= block.timestamp - priceFeedA.heartbeat * 2,
-            "Stale price"
-        );
-        require(
-            updatedAtB >= block.timestamp - priceFeedB.heartbeat * 2,
-            "Stale price"
-        );
+        require(updatedAtA >= block.timestamp - priceFeedA.heartbeat * 2, "Stale price");
+        require(updatedAtB >= block.timestamp - priceFeedB.heartbeat * 2, "Stale price");
 
-        uint256 priceA = uint256(priceA_int) *
-            10 ** (18 - priceFeedA.feed.decimals());
-        uint256 priceB = uint256(priceB_int) *
-            10 ** (18 - priceFeedB.feed.decimals());
+        uint256 priceA = uint256(priceA_int) * 10 ** (18 - priceFeedA.feed.decimals());
+        uint256 priceB = uint256(priceB_int) * 10 ** (18 - priceFeedB.feed.decimals());
 
-        uint256 aDecMultiplier = (10 **
-            (18 - IERC20Metadata(tokenA).decimals()));
-        uint256 bDecMultiplier = (10 **
-            (18 - IERC20Metadata(tokenB).decimals()));
+        uint256 aDecMultiplier = (10 ** (18 - IERC20Metadata(tokenA).decimals()));
+        uint256 bDecMultiplier = (10 ** (18 - IERC20Metadata(tokenB).decimals()));
 
         return mulDiv(priceA * aDecMultiplier, RAY, priceB * bDecMultiplier);
     }
 
-    function _checkPriceRatio(
-        address tokenA,
-        address tokenB,
-        uint256 amountA,
-        uint256 amountB,
-        PoolType poolType
-    ) public view {
-        PoolData memory poolData = poolKeyToPoolData[
-            getPoolKey(tokenA, tokenB, poolType)
-        ];
-        uint256 aDecMultiplier = (10 **
-            (18 - IERC20Metadata(tokenA).decimals()));
-        uint256 bDecMultiplier = (10 **
-            (18 - IERC20Metadata(tokenB).decimals()));
+    function _checkPriceRatio(address tokenA, address tokenB, uint256 amountA, uint256 amountB, PoolType poolType)
+        public
+        view
+    {
+        PoolData memory poolData = poolKeyToPoolData[getPoolKey(tokenA, tokenB, poolType)];
+        uint256 aDecMultiplier = (10 ** (18 - IERC20Metadata(tokenA).decimals()));
+        uint256 bDecMultiplier = (10 ** (18 - IERC20Metadata(tokenB).decimals()));
 
         // Check using reserve ratio if basic volatile pool
         if (poolType == PoolType.BASIC_VOLATILE) {
-            (uint256 reserveA, uint256 reserveB) = aerodromeRouter.getReserves(
-                tokenA,
-                tokenB,
-                false,
-                aerodromeRouter.defaultFactory()
-            );
+            (uint256 reserveA, uint256 reserveB) =
+                aerodromeRouter.getReserves(tokenA, tokenB, false, aerodromeRouter.defaultFactory());
 
             uint256 reserveRatio = mulDiv(reserveB, RAY, reserveA);
             uint256 priceFeedRatio = _combinePriceFeeds(tokenA, tokenB);
 
             // 0.5% allowed deviation from chainlink data
-            uint256 allowedDeviation = mulDiv(
-                priceFeedRatio,
-                LIQ_SLIPPAGE,
-                FEE_DENOMINATOR
-            );
+            uint256 allowedDeviation = mulDiv(priceFeedRatio, LIQ_SLIPPAGE, FEE_DENOMINATOR);
 
-            require(
-                _diff(reserveRatio, priceFeedRatio) <= allowedDeviation,
-                "Price has deviated too much"
-            );
+            require(_diff(reserveRatio, priceFeedRatio) <= allowedDeviation, "Price has deviated too much");
         } else if (poolType == PoolType.BASIC_STABLE) {
             // If stable pool, check using amountOut when swapping
             IPool pool = IPool(poolData.poolAddress);
@@ -927,47 +727,29 @@ contract L2LiquidityManager is OApp {
             if (amountA > 0) {
                 // divide amount by 10 to reduce price impact of theoretical swap
                 amountOut = pool.getAmountOut(amountA / 10, tokenA);
-                lowerBound = mulDiv(
-                    amountA * aDecMultiplier,
-                    FEE_DENOMINATOR - LIQ_SLIPPAGE,
-                    FEE_DENOMINATOR
-                );
-                upperBound = mulDiv(
-                    amountA * aDecMultiplier,
-                    FEE_DENOMINATOR + LIQ_SLIPPAGE,
-                    FEE_DENOMINATOR
-                );
+                lowerBound = mulDiv(amountA * aDecMultiplier, FEE_DENOMINATOR - LIQ_SLIPPAGE, FEE_DENOMINATOR);
+                upperBound = mulDiv(amountA * aDecMultiplier, FEE_DENOMINATOR + LIQ_SLIPPAGE, FEE_DENOMINATOR);
 
                 require(
-                    amountOut * bDecMultiplier * 10 >= lowerBound &&
-                        amountOut * bDecMultiplier * 10 <= upperBound,
+                    amountOut * bDecMultiplier * 10 >= lowerBound && amountOut * bDecMultiplier * 10 <= upperBound,
                     "Price impact exceeded 0.5%"
                 );
             } else {
                 // divide amount by 10 to reduce price impact of theoretical swap
                 amountOut = pool.getAmountOut(amountB / 10, tokenB);
 
-                lowerBound = mulDiv(
-                    amountB * bDecMultiplier,
-                    FEE_DENOMINATOR - LIQ_SLIPPAGE,
-                    FEE_DENOMINATOR
-                );
-                upperBound = mulDiv(
-                    amountB * bDecMultiplier,
-                    FEE_DENOMINATOR + LIQ_SLIPPAGE,
-                    FEE_DENOMINATOR
-                );
+                lowerBound = mulDiv(amountB * bDecMultiplier, FEE_DENOMINATOR - LIQ_SLIPPAGE, FEE_DENOMINATOR);
+                upperBound = mulDiv(amountB * bDecMultiplier, FEE_DENOMINATOR + LIQ_SLIPPAGE, FEE_DENOMINATOR);
 
                 require(
-                    amountOut * aDecMultiplier * 10 >= lowerBound &&
-                        amountOut * aDecMultiplier <= upperBound,
+                    amountOut * aDecMultiplier * 10 >= lowerBound && amountOut * aDecMultiplier <= upperBound,
                     "Price impact exceeded 0.5%"
                 );
             }
         } else {
             // concentrated pool, check slot0
             ICLPool pool = ICLPool(poolData.poolAddress);
-            (uint160 sqrtPriceX96, , , , , ) = pool.slot0(); // price of token0, denominated in token1
+            (uint160 sqrtPriceX96,,,,,) = pool.slot0(); // price of token0, denominated in token1
 
             address poolToken0 = pool.token0();
 
@@ -983,30 +765,16 @@ contract L2LiquidityManager is OApp {
             uint256 spotPrice = _getPriceRatio(sqrtPriceX96, token0Dec);
 
             //0.5% allowed deviation from chainlink data
-            uint256 allowedDeviation = mulDiv(
-                priceFeedRatio,
-                LIQ_SLIPPAGE,
-                FEE_DENOMINATOR
-            );
+            uint256 allowedDeviation = mulDiv(priceFeedRatio, LIQ_SLIPPAGE, FEE_DENOMINATOR);
 
-            require(
-                _diff(spotPrice, priceFeedRatio) <= allowedDeviation,
-                "Price has deviated too much"
-            );
+            require(_diff(spotPrice, priceFeedRatio) <= allowedDeviation, "Price has deviated too much");
         }
     }
 
-    function _getPriceRatio(
-        uint160 sqrtPriceX96,
-        uint256 dec
-    ) internal pure returns (uint256) {
-        return
-            mulDiv(
-                uint256(sqrtPriceX96),
-                (10 ** dec) * (RAY / WAD) * uint256(sqrtPriceX96),
-                2 ** 192
-            );
+    function _getPriceRatio(uint160 sqrtPriceX96, uint256 dec) internal pure returns (uint256) {
+        return mulDiv(uint256(sqrtPriceX96), (10 ** dec) * (RAY / WAD) * uint256(sqrtPriceX96), 2 ** 192);
     }
+
     function _diff(uint256 a, uint256 b) internal pure returns (uint256) {
         return a > b ? a - b : b - a;
     }
@@ -1027,38 +795,14 @@ contract L2LiquidityManager is OApp {
         address _executor,
         bytes calldata _extraData
     ) internal override {
-        (
-            address tokenA,
-            address tokenB,
-            uint256 amountA,
-            uint256 amountB,
-            address user,
-            PoolType poolType
-        ) = abi.decode(
-                _message,
-                (address, address, uint256, uint256, address, PoolType)
-            );
+        (address tokenA, address tokenB, uint256 amountA, uint256 amountB, address user, PoolType poolType) =
+            abi.decode(_message, (address, address, uint256, uint256, address, PoolType));
 
-        emit CrossChainLiquidityReceived(
-            user,
-            tokenA,
-            tokenB,
-            amountA,
-            amountB
-        );
+        emit CrossChainLiquidityReceived(user, tokenA, tokenB, amountA, amountB);
 
-        uint256 liquidity = _depositLiquidity(
-            tokenA,
-            tokenB,
-            amountA,
-            amountB,
-            poolType,
-            user
-        );
+        uint256 liquidity = _depositLiquidity(tokenA, tokenB, amountA, amountB, poolType, user);
 
-        PoolData memory poolData = poolKeyToPoolData[
-            getPoolKey(tokenA, tokenB, poolType)
-        ];
+        PoolData memory poolData = poolKeyToPoolData[getPoolKey(tokenA, tokenB, poolType)];
         IERC20(poolData.poolAddress).transfer(user, liquidity);
     }
 
@@ -1076,11 +820,7 @@ contract L2LiquidityManager is OApp {
      * @param denominator The divisor
      * @return result The result of (x * y) / denominator
      */
-    function mulDiv(
-        uint256 x,
-        uint256 y,
-        uint256 denominator
-    ) internal pure returns (uint256 result) {
+    function mulDiv(uint256 x, uint256 y, uint256 denominator) internal pure returns (uint256 result) {
         uint256 prod0;
         uint256 prod1;
         assembly {
@@ -1139,52 +879,6 @@ interface IWETH {
     function withdraw(uint256 amount) external;
 }
 
-/// @title Interface for Concentrated Liquidity Pool
-/// @notice Defines the functions for interacting with a concentrated liquidity pool
-interface ICLPool {
-    /// @notice Mints a new position in the pool
-    /// @param lowerTick The lower tick of the position
-    /// @param upperTick The upper tick of the position
-    /// @param amount The amount of liquidity to mint
-    /// @return tokenId The ID of the minted NFT position
-    /// @return liquidity The amount of liquidity minted
-    /// @return amount0 The amount of token0 added to the position
-    /// @return amount1 The amount of token1 added to the position
-    function mint(
-        int24 lowerTick,
-        int24 upperTick,
-        uint128 amount
-    )
-        external
-        returns (
-            uint256 tokenId,
-            uint128 liquidity,
-            uint256 amount0,
-            uint256 amount1
-        );
-
-    /// @notice Returns the current state of the pool
-    /// @return sqrtPriceX96 The current price of the pool as a sqrt(price) Q64.96 value
-    /// @return tick The current tick of the pool
-    /// @return observationIndex The index of the last oracle observation that was written
-    /// @return observationCardinality The current maximum number of observations stored in the pool
-    /// @return observationCardinalityNext The next maximum number of observations, to be updated when the observation.
-    /// @return feeProtocol The current protocol fee for the pool
-    /// @return unlocked Whether the pool is currently locked to reentrancy
-    function slot0()
-        external
-        view
-        returns (
-            uint160 sqrtPriceX96,
-            int24 tick,
-            uint16 observationIndex,
-            uint16 observationCardinality,
-            uint16 observationCardinalityNext,
-            uint8 feeProtocol,
-            bool unlocked
-        );
-}
-
 /// @title Router token swapping functionality
 /// @notice Functions for swapping tokens via CL
 interface ISwapRouterV3 {
@@ -1202,7 +896,5 @@ interface ISwapRouterV3 {
     /// @notice Swaps `amountIn` of one token for as much as possible of another token
     /// @param params The parameters necessary for the swap, encoded as `ExactInputSingleParams` in calldata
     /// @return amountOut The amount of the received token
-    function exactInputSingle(
-        ExactInputSingleParams calldata params
-    ) external payable returns (uint256 amountOut);
+    function exactInputSingle(ExactInputSingleParams calldata params) external payable returns (uint256 amountOut);
 }

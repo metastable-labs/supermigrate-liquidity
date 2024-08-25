@@ -83,9 +83,7 @@ interface ICLPool {
             bool initialized
         );
 
-        function burn(int24 tickLower, int24 tickUpper, uint128 amount)
+    function burn(int24 tickLower, int24 tickUpper, uint128 amount)
         external
         returns (uint256 amount0, uint256 amount1);
-
-
 }

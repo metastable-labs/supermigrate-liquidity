@@ -114,8 +114,7 @@ contract LiquidityMigration is OApp {
         address l2TokenA = params.l2TokenA;
         address l2TokenB = params.l2TokenB;
 
-        bytes memory payload =
-            abi.encode(l2TokenA, l2TokenB, amountA, amountB, msg.sender, params.poolType);
+        bytes memory payload = abi.encode(l2TokenA, l2TokenB, amountA, amountB, msg.sender, params.poolType);
 
         receipt = _lzSend(params.dstEid, payload, _options, MessagingFee(msg.value, 0), payable(msg.sender));
 
